@@ -1,5 +1,8 @@
 <div class="ui container">
   <h1>Dashboard</h1>
+  <h2>Create campus</h2>
+  <app-campus-create></app-campus-create>
+  <h2>Campuses</h2>
   <div class="ui two cards">
       <div class="ui red card">
         <app-campus *ngIf="campus !== undefined" [campus]="campus"></app-campus>

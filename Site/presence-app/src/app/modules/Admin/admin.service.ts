@@ -39,4 +39,11 @@ export class AdminDataService {
     return this.http.delete(`/API/campus/${name}/location/${id}`)
       .map(res => res.json()).map(item => Campus.fromJSON(item));
   }
+
+  addCampus(campus) : Observable<Campus> {
+    let headers = new Headers({ 'Content-Type': 'application/json' });
+    let options = new RequestOptions({ headers: headers });
+    return this.http.post('/API/campus/', JSON.stringify({_id: campus, locations: []}), options)
+      .map(res => res.json()).map(item => Campus.fromJSON(item));
+  }
 }

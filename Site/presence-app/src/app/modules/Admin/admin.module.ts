@@ -9,6 +9,7 @@ import { LocationComponent } from './components/location/location/location.compo
 import { LocationListComponent } from './components/location/location-list/location-list.component';
 import { DashboardComponent } from './pages/dashboard/dashboard.component';
 import { DragulaModule } from 'ng2-dragula';
+import { CampusCreateComponent } from './components/campus/campus-create/campus-create.component';
 
 const routes = [
   { path: '', component:  DashboardComponent},
@@ -26,7 +27,8 @@ const routes = [
     CampusListComponent,
     LocationComponent,
     LocationListComponent,
-    DashboardComponent
+    DashboardComponent,
+    CampusCreateComponent
   ],
   providers: [
     AdminDataService
