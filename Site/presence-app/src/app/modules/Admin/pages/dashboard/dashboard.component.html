@@ -1,0 +1,11 @@
+<div class="ui container">
+  <h1>Dashboard</h1>
+  <div class="ui horizontal segments">
+      <div class="ui segment">
+        <app-location-list *ngIf="campus !== undefined" [campus]="campus"></app-location-list>
+      </div>
+      <div class="ui segment">
+        <app-campus-list [campuses]="campuses"></app-campus-list>
+      </div>
+  </div>
+</div>

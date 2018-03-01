@@ -1,0 +1,11 @@
+<div *ngIf="locations !== undefined">
+    <div class="ui segment" >
+  <div class="ui unordered list" id="location-list" [dragula]='"bag-locations"' 
+    id="{{campus.name}}">
+    
+      <app-location *ngFor="let localLocation of campus.locations" [location]="localLocation"
+      id="{{localLocation._id}}">
+      </app-location>
+    </div>
+  </div>
+</div>
