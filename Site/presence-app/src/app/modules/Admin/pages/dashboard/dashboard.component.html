@@ -1,10 +1,10 @@
 <div class="ui container">
   <h1>Dashboard</h1>
-  <div class="ui horizontal segments">
-      <div class="ui segment">
-        <app-location-list *ngIf="campus !== undefined" [campus]="campus"></app-location-list>
+  <div class="ui two cards">
+      <div class="ui red card">
+        <app-campus *ngIf="campus !== undefined" [campus]="campus"></app-campus>
       </div>
-      <div class="ui segment">
+      <div class="ui green card">
         <app-campus-list [campuses]="campuses"></app-campus-list>
       </div>
   </div>

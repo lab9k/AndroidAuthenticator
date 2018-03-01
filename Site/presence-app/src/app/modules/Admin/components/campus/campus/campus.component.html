@@ -1,9 +1,7 @@
-<p>{{campus.name}}</p>
-<div class="ui animated bulleted list" id="location-list">
-    <!--<app-location *ngFor="let localLocation of campus.locations" [location]="localLocation"
-        [dragula]='"bag-locations"'>
-    </app-location>-->
-    <app-location-list [campus]="campus">
-
-    </app-location-list>
+<div class="ui segment">
+    <p>{{campus.name}}</p>
+    <div class="ui container" id="location-list">
+        <app-location-list [campus]="campus">
+        </app-location-list>
+    </div>  
 </div>

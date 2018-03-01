@@ -11,7 +11,6 @@ import { DragulaService } from 'ng2-dragula/components/dragula.provider';
 })
 export class DashboardComponent implements OnInit {
 
-  private _locations: Location[];
   private _campuses: Campus[];
   private _campus: Campus;
 
@@ -22,17 +21,11 @@ export class DashboardComponent implements OnInit {
   ngOnInit() {
     this._adminDataService.campuses()
     .subscribe(items => {
-      this._locations = items.filter( location =>
-        location.name === "Not in a campus")[0].locations;
-      this._campus = items.filter( location =>
-        location.name === "Not in a campus")[0]
+      this._campus = items.filter( campus =>
+        campus.name === "Not in a campus")[0];
       this._campuses = items.filter( campus =>
         campus.name !== "Not in a campus");
     });
-  }
-
-  get locations() {
-    return this._locations;
   }
 
   get campuses() {

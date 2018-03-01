@@ -225,7 +225,7 @@ router.delete('/API/campus/:name/location/:id', function(req, res, next) {
 /* GET ALL CAMPUS */
 router.get('/API/campuses', function(req, res, next) {
   Campus.aggregate([
-    {$unwind: "$locations"},
+    {$unwind: {"path": "$locations", "preserveNullAndEmptyArrays": true}},
     {$lookup:
       {
         from: "locations",
@@ -241,6 +241,7 @@ router.get('/API/campuses', function(req, res, next) {
       },
   ],function(err, campuses) {
     if(err) {next(err);}
+    
     res.json(campuses);
   });
 });
