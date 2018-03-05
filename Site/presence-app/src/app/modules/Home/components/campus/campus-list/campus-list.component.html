@@ -1,4 +1,9 @@
-<div class="ui container" id="campus-list">
-  <app-campus *ngFor="let localCampus of campuses" [campus]="localCampus">
-  </app-campus>
+<div class="ui container">
+  <h1 class="ui header">Campussen</h1>
+  <div class="ui two column centered grid">
+    
+    <app-campus *ngFor="let localCampus of campuses" [campus]="localCampus">
+    </app-campus>
+    
+  </div>
 </div>

@@ -23,7 +23,7 @@ export class UserListComponent implements OnInit {
         items.map(user => {
           this.campus.locations.map(location => {
             let loc = Location.fromJSON(location);
-            if(loc.id === user.checkin.location) {
+            if(user.checkin && loc.id === user.checkin.location) {
               this._users.push(user);
             }
           })

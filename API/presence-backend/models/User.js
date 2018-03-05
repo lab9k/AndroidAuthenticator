@@ -10,6 +10,7 @@ let UserSchema = new mongoose.Schema({
         },
         time: Number,
     },
+    picture: String,
 });
 
 mongoose.model('User', UserSchema);

@@ -5,6 +5,8 @@ let mongoose = require('mongoose');
 let Location = mongoose.model('Location');
 let User = mongoose.model('User');
 let Campus = mongoose.model('Campus');
+const {OAuth2Client} = require('google-auth-library');
+const client = new OAuth2Client('780736623262-jcskkstckghd9fg2nom07dgq393ttehp.apps.googleusercontent.com');
 
 String.prototype.toObjectId = function() {
   var ObjectId = (require('mongoose').Types.ObjectId);
@@ -269,5 +271,45 @@ router.get('/API/location/:id', function(req, res, next) {
     res.json(location);
   });
 });
+
+router.post('/API/login', function(req, res, next) {
+  let token = req.body.token;
+  verify(token, function(payload) {
+    User.findById({_id: payload.email}, function(err, user) {
+      if(err) { return next(err); }
+      console.log(user);
+      if(user !== []) {
+        console.log(user);
+        res.json(user);
+      }
+      else {
+        let user = new User({
+          _id: payload.email, 
+          name: payload.name, 
+          checkin: [], 
+          picture: payload.picture
+        });
+        user.save(function(err, usr) {
+          if(err) { return next(err);}
+          console.log(usr);
+          res.json(usr);
+        });
+      }
+    });
+  }).catch(console.error);
+  
+});
+
+async function verify(token, callback) {
+  const ticket = await client.verifyIdToken({
+      idToken: token,
+      audience: '780736623262-jcskkstckghd9fg2nom07dgq393ttehp.apps.googleusercontent.com',  
+  });
+  const payload = ticket.getPayload();
+  const userid = payload['sub'];
+  callback(payload);
+  // If request specified a G Suite domain:
+  //const domain = payload['hd'];
+}
 
 module.exports = router;
