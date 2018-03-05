@@ -8,6 +8,7 @@ import { LoginComponent } from './modules/Login/components/login/login.component
 import { HttpModule } from '@angular/http';
 import { AuthenticationService } from './shared/services/authentication.service';
 import { AuthGuardService } from './modules/app-routing/auth-guard.service';
+import { LocationComponent } from './modules/Checkin/components/location/location.component';
 
 @NgModule({
   declarations: [

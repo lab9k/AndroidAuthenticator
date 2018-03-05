@@ -14,6 +14,11 @@ const appRoutes: Routes = [
         loadChildren: '../Admin/admin.module#AdminModule'
     },
     {
+        path: 'checkin',
+        canActivate: [ AuthGuardService ],
+        loadChildren: '../Checkin/checkin.module#CheckinModule'
+    },
+    {
         path: 'login',
         loadChildren: '../Login/login.module#LoginModule'
     },

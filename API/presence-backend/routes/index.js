@@ -108,43 +108,46 @@ router.post('/API/checkin/', function(req, res, next) {
     );
   }
   let user = null;
+  let id = req.body.locationid;
+  
   User.findById(req.body.userid, function(err, usr) {
     if(err) {return next(err);}
     user = usr;
-  });
-  let id = req.body.locationid;
-  Location.findById(id, function(err, location) {
-    if (err) { return next(err);}
-    if(!location) {
-      location = new Location({"_id": id, "name": undefined});
-      location.save(function(err, loc) {
-        if (err) { return next(err);}
-        Campus.findById("Not in a campus", function(err, cmp) {
-          cmp.locations.push(location);
-          cmp.save(function(err, camp) {
-            if(err) {return next(err);}
+
+    Location.findById(id, function(err, location) {
+      if (err) { return next(err);}
+      if(!location) {
+        location = new Location({"_id": id, "name": undefined});
+        location.save(function(err, loc) {
+          if (err) { return next(err);}
+          Campus.findById("Not in a campus", function(err, cmp) {
+            cmp.locations.push(location);
+            cmp.save(function(err, camp) {
+              if(err) {return next(err);}
+            });
           });
         });
-      });
-    }
-    if(!location.name) {
+      }
+      if(!location.name) {
+        user.checkin = { location: location, time: +new Date()};
+        location.save(function(err, loc) {
+          if (err) { return next(err);}
+        });
+        user.save(function(er, usr) {
+          if(err) { return next(err);}
+        });
+        return res.status(200).json(
+          {message: 'Location has no name.'}
+        );
+      }
       user.checkin = { location: location, time: +new Date()};
-      location.save(function(err, loc) {
+      user.save(function(err, usr) {
         if (err) { return next(err);}
+        res.status(201).json(usr);
       });
-      user.save(function(er, usr) {
-        if(err) { return next(err);}
-      });
-      return res.status(200).json(
-        {message: 'Location has no name.'}
-      );
-    }
-    user.checkin = { location: location, time: +new Date()};
-    user.save(function(err, usr) {
-      if (err) { return next(err);}
-      res.status(201).json(usr);
     });
   });
+  
 });
 
 /*Add user */

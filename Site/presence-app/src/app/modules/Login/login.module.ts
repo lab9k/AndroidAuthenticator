@@ -22,6 +22,7 @@ const routes = [
     LogoutComponent
   ],
   providers: [
+
   ]
 })
 export class LoginModule { }
