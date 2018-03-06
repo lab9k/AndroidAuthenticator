@@ -1,7 +1,8 @@
 <div class="column"><div class="ui card" style="min-height:100px;">
     <div class="ui segment">
             <h3 class="ui header">{{campus.name}}</h3>
-            <app-user-list [campus]="campus">
+            <app-user-list *ngIf="users"
+                [campus]="campus" [users]="users">
             </app-user-list>
     </div>
     

@@ -12,28 +12,25 @@ import { Location } from '../../../../../shared/models/location.model';
 export class UserListComponent implements OnInit {
 
   @Input() public campus: Campus;
-  private _users: User[];
+  @Input() public users: User[];
+  private _filteredUsers: User[];
   
   constructor(private _userDataService: HomeDataService) { }
 
   ngOnInit() {
-    this._users = [];
-    this._userDataService.users()
-      .subscribe(items => {
-        items.map(user => {
-          this.campus.locations.map(location => {
-            let loc = Location.fromJSON(location);
-            if(user.checkin && loc.id === user.checkin.location) {
-              this._users.push(user);
-            }
-          })
-        })
-
-      });
+    this._filteredUsers = [];
+    this.users.map(user => {
+      this.campus.locations.map(location => {
+        let loc = Location.fromJSON(location);
+        if(user.checkin && loc.id === user.checkin.location) {
+          this._filteredUsers.push(user);
+        }
+      })
+    })
   }
 
-  get users() {
-    return this._users;
+  get filteredUsers() {
+    return this._filteredUsers;
   }
 
 }

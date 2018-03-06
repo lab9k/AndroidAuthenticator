@@ -3,7 +3,6 @@ import { Location } from '../../../../../shared/models/location.model';
 import { DragulaService } from 'ng2-dragula';
 import { AdminDataService } from '../../../admin.service';
 import { Campus } from '../../../../../shared/models/campus.model';
-import { log } from 'util';
 
 @Component({
   selector: 'app-location-list',
@@ -51,7 +50,6 @@ export class LocationListComponent implements OnInit, OnDestroy {
         location.id === e.id)[0];
       let index = this._locations.indexOf(loc);
       this._locations.splice(index,1);
-      console.log("remove " + this.campus.name + " " +  loc.id);
       this.adminDataService.removeLocation(this.campus.name, loc.id).subscribe();
     }
   }
@@ -64,9 +62,7 @@ export class LocationListComponent implements OnInit, OnDestroy {
       
       this.adminDataService.getLocation(e.id).subscribe(items => {
         l = items;
-        console.log(l);
         this._locations.push(l);
-        console.log("add " + this.campus.name + " " + l.id);
         this.adminDataService.addLocation(this.campus.name, l.id).subscribe();
       });
     
@@ -80,9 +76,7 @@ export class LocationListComponent implements OnInit, OnDestroy {
       let l;
       this.adminDataService.getLocation(e.id).subscribe(items => {
         l = items;
-        console.log(l);
         this._locations.push(l);
-        console.log("add " + this.campus.name + " " + l.id);
         this.adminDataService.addLocation(this.campus.name, l.id).subscribe();
       });
     }

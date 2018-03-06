@@ -1,5 +1,7 @@
 import { Component, OnInit, Input } from '@angular/core';
 import { Campus } from '../../../../../shared/models/campus.model';
+import { HomeDataService } from '../../../home.service';
+import { User } from '../../../../../shared/models/user.model';
 
 @Component({
   selector: 'app-campus',
@@ -9,9 +11,12 @@ import { Campus } from '../../../../../shared/models/campus.model';
 export class CampusComponent implements OnInit {
 
   @Input() public campus: Campus;
+  @Input() public users: User[];
+  
   constructor() { }
 
   ngOnInit() {
+    
   }
 
 }
