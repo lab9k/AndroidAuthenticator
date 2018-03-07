@@ -1,13 +1,13 @@
 let mongoose = require('mongoose')
 
-let CampusSchema = new mongoose.Schema({
+let SegmentSchema = new mongoose.Schema({
     name: String,
-    segments: [
+    locations: [
         {
             type: mongoose.Schema.Types.ObjectId,
-            ref: 'Segment'
+            ref: 'Location'
         },
     ]
 });
 
-mongoose.model('Campus', CampusSchema);
+mongoose.model('Segment', SegmentSchema);

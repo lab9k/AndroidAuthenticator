@@ -9,8 +9,9 @@ var mongoose = require('mongoose');
 require('./models/User');
 require('./models/Location');
 require('./models/Campus');
+require('./models/Segment');
 
-mongoose.connect('mongodb://localhost/presencedb');
+mongoose.connect('mongodb://localhost/presencedb2');
 
 var index = require('./routes/index');
 var users = require('./routes/users');

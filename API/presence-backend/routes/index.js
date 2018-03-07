@@ -5,101 +5,16 @@ let mongoose = require('mongoose');
 let Location = mongoose.model('Location');
 let User = mongoose.model('User');
 let Campus = mongoose.model('Campus');
+let Segment = mongoose.model('Segment');
+
 const {OAuth2Client} = require('google-auth-library');
 const client = new OAuth2Client('780736623262-jcskkstckghd9fg2nom07dgq393ttehp.apps.googleusercontent.com');
-
-String.prototype.toObjectId = function() {
-  var ObjectId = (require('mongoose').Types.ObjectId);
-  return new ObjectId(this.toString());
-};
 
 /* GET home page. */
 router.get('/', function(req, res, next) {
   res.render('index', { title: 'Express' });
 });
-/*
-router.get('/API/test', function(req, res, next) {
-  Location.aggregate([ 
-    {$unwind: "$checkins" },
-    {$sort: { "checkins.time": -1}},
-    {$group: { 
-      _id: "$checkins.userid", 
-      name: {$first: "$name"},
-      time: {$first: "$checkins.time"}
-    }},
-    {$lookup: {
-      from: "users",
-      localField: "_id",
-      foreignField: "_id",
-      as: "user"
-    }}, 
-    { $project: {  
-      _id: 0,
-      user: {$arrayElemAt: ["$user", 0]},
-      name: 1,
-      time: 1
-    }},
-    {$group: {
-      _id: "$name",
-      users: {$push: {user: "$user", time: "$time"}}
-    }},
-    {$project: {
-      _id: 0,
-      name: "$_id",
-      users: 1
-    }}
-    
-  ], function(err, locations) {
-      if(err) { return next(err);}
-      res.json(locations);
-    });
-});
-*/
-/* Get checkins from all locations from the last 8 hours 
-router.get('/API/checkins', function(req, res, next) {
-  if((req.query.seconds && isNaN(req.query.seconds)) || (req.query.hours && isNaN(req.query.locationId))) {
-    return res.status(400).json(
-      {message: 'Enter a number for hours/locationId.'}
-    );
-  }
-  let seconds = 8 * 3600;
 
-  if(req.query.seconds) { 
-    seconds = req.query.seconds;
-  }
-  if(req.query.locationId) {
-    Location.aggregate([{$match: {"checkins.time": {$gte: +new Date() - seconds * 1000}, "_id": req.query.locationId}},
-                        {$project: {
-                          name: 1,
-                          checkins: {$filter: {
-                            input: "$checkins",
-                            as: "checkin",
-                            cond: {$gte: ["$$checkin.time", +new Date() - seconds * 1000]}
-                          }},
-                          _id: 1
-                        }}], function(err, locations) {
-                              if(err) { return next(err);}
-                              res.json(locations);
-    });
-  }
-  else {
-    Location.aggregate([{$match: {"checkins.time": {$gte: +new Date() - seconds * 1000}}},
-                        {$project: {
-                          name: 1,
-                          checkins: {$filter: {
-                            input: "$checkins",
-                            as: "checkin",
-                            cond: {$gte: ["$$checkin.time", +new Date() - seconds * 1000]}
-                          }},
-                          _id: 1
-                        }}], function(err, locations) {
-                              if(err) { return next(err);}
-                              res.json(locations);
-    });
-  }
-
-});
-*/
 /* Checkin user */
 router.post('/API/checkin/', function(req, res, next) {
   if(!req.body.userid || !req.body.locationid) {
@@ -115,19 +30,10 @@ router.post('/API/checkin/', function(req, res, next) {
     if(usr) {
       user = usr;
       
-      Location.findById(id, function(err, location) {
+      Location.findById(req.body.locationid, function(err, location) {
         if (err) { return next(err);}
         if(!location) {
-          location = new Location({"_id": id, "name": undefined});
-          location.save(function(err, loc) {
-            if (err) { return next(err);}
-            Campus.findById("Not in a campus", function(err, cmp) {
-              cmp.locations.push(location);
-              cmp.save(function(err, camp) {
-                if(err) {return next(err);}
-              });
-            });
-          });
+          return res.status(200).json({message: 'New sticker'});
         }
         if(!location.name) {
           user.checkin = { location: location, time: +new Date()};
@@ -152,7 +58,7 @@ router.post('/API/checkin/', function(req, res, next) {
   });
 });
 
-/*Add user */
+/* CREATE USER */
 router.post('/API/user/', function(req, res, next) {
   let user = new User(req.body);
   user.save(function(err, usr) {
@@ -160,29 +66,6 @@ router.post('/API/user/', function(req, res, next) {
     res.json(usr);
   })
 });
-
-/* Name location */
-router.put('/API/location/', function(req, res, next) {
-  if(!req.body.name) {
-    return res.status(400).json(
-      {message: 'Enter name.'}
-    );
-  }
-  Location.findById(req.body._id, function(err, location) {
-    if(!location.name) {
-      location.name = req.body.name;
-      location.save(function(err, loc) {
-        if (err) { return next(err);}
-        res.json(loc);
-      });
-    }
-    else {
-      return res.status(400).json(
-        {message: 'Location already has a name.'}
-      );
-    }
-  });
-})
 
 /* CREATE CAMPUS */
 router.post('/API/campus/', function(req, res, next) {
@@ -193,63 +76,110 @@ router.post('/API/campus/', function(req, res, next) {
   })
 });
 
-/* ADD LOCATION TO CAMPUS */
-router.put('/API/campus/:name', function(req, res, next) {
-  console.log("add " + req.params.name + " " + req.body.id);
-  Campus.findById(req.params.name, function(err, camp) {
+/* CREATE SEGMENT */
+router.post('/API/segment/', function(req, res, next) {
+  let segment = new Segment(req.body);
+  segment.save(function(err, seg) {
     if(err) { return next(err);}
-    Location.findById(req.body.id, function(err, location) {
-      console.log(location);
-      camp.locations.push(location);
-      console.log(camp);
-      camp.save(function(err, cam) {
-        if(err) {next(err);}
-        res.json(cam);
-      });
-    });
-  });
+    res.json(seg);
+  })
 });
 
-/* REMOVE LOCATION FROM CAMPUS */
-router.delete('/API/campus/:name/location/:id', function(req, res, next) {
-  console.log("remove name:" + req.params.name + " id:" + req.params.id);
-  Campus.findById(req.params.name, function(err, camp) {
+/* CREATE LOCATION */
+router.post('/API/location/', function(req, res, next) {
+  let location = new Location(req.body);
+  location.save(function(err, loc) {
     if(err) { return next(err);}
-    Location.findById(req.params.id, function(err, location) {
-      console.log(camp);
-      console.log(location);
-      let index = camp.locations.indexOf(location._id);
-      console.log(index);
-      camp.locations.splice(index, 1);
-      camp.save(function(err, cam) {
-        if(err) {next(err);}
-        res.json(cam);
-      });
-    });
-  });
+    res.json(loc);
+  })
 });
 
-/* GET ALL CAMPUS */
+/* UPDATE USER */
+router.put('/API/user/', function(req, res, next) {
+  User.findByIdAndUpdate(req.body._id, req.body, function (err, user) {
+    if (err) { return next(err); }
+    res.json(user);
+  })
+});
+
+/* UPDATE CAMPUS */
+router.put('/API/campus/', function(req, res, next) {
+  Campus.findByIdAndUpdate(req.body._id, req.body, function (err, campus) {
+    if (err) { return next(err); }
+    res.json(campus);
+  })
+});
+
+/* UPDATE SEGMENT */
+router.put('/API/segment/', function(req, res, next) {
+  Segment.findByIdAndUpdate(req.body._id, req.body, function (err, segment) {
+    if (err) { return next(err); }
+    res.json(segment);
+  })
+});
+
+/* UPDATE LOCATION */
+router.put('/API/location/', function(req, res, next) {
+  console.log(req.body);
+  Location.findByIdAndUpdate(req.body._id, req.body, function (err, location) {
+    if (err) { return next(err); }
+    res.json(location);
+  })
+});
+
+/* GET CAMPUSES */
 router.get('/API/campuses', function(req, res, next) {
   Campus.aggregate([
-    {$unwind: {"path": "$locations", "preserveNullAndEmptyArrays": true}},
+    {$unwind: {"path": "$segments", "preserveNullAndEmptyArrays": true}},
+    {$lookup:
+      {
+        from: "segments",
+        localField: "segments",
+        foreignField: "_id",
+        as: "segment"
+      }
+    },
+    {$lookup:
+      {
+        from: "locations",
+        localField: "segment.locations",
+        foreignField: "_id",
+        as: "locations"
+      }
+    },
+    {
+      $group: {
+        _id: "$_id",
+        name: {$first: "$name"},
+        segments: { $push: {
+          _id: {$arrayElemAt:["$segment._id", 0]},
+          name: {$arrayElemAt:["$segment.name", 0]},
+          locations: "$locations"}
+        },
+      }
+    },
+  ],function(err, campuses) {
+    if(err) {next(err);}
+    
+    res.json(campuses);
+  });
+});
+
+/* GET SEGMENTS */
+router.get('/API/segments', function(req, res, next) {
+  Segment.aggregate([
     {$lookup:
       {
         from: "locations",
         localField: "locations",
         foreignField: "_id",
-        as: "location"
-      }},
-      {
-        $group: {
-          _id: "$_id",
-          locations: {$push: {$arrayElemAt: ["$location", 0]}}
-        }
-      },
-  ],function(err, campuses) {
+        as: "locations"
+      }
+    }
+  ],function(err, segments) {
     if(err) {next(err);}
     
-    res.json(campuses);
+    res.json(segments);
   });
 });
 
@@ -269,6 +199,83 @@ router.get('/API/users', function(req, res, next) {
   });
 });
 
+/* GET USER BY ID */
+router.get('/API/user/:id', function(req, res, next) {
+  User.findById(req.params.id, function(err, user) {
+    if (err) { return next(err); } 
+    if(user) {
+      res.json(user);
+    }
+    else {
+      return res.status(400).json({message: 'User does not exist'});
+    } 
+  });
+});
+
+/* GET CAMPUS BY ID */
+router.get('/API/campus/:id', function(req, res, next) {
+  Campus.aggregate([
+    {$match: {_id: req.params.id}},
+    {$unwind: {"path": "$segments", "preserveNullAndEmptyArrays": true}},
+    {$lookup:
+      {
+        from: "segments",
+        localField: "segments",
+        foreignField: "_id",
+        as: "segment"
+      }
+    },
+    {$lookup:
+      {
+        from: "locations",
+        localField: "segment.locations",
+        foreignField: "_id",
+        as: "locations"
+      }
+    },
+    {
+      $group: {
+        _id: "$_id",
+        name: {$first: "$name"},
+        segments: { $push: {
+          _id: {$arrayElemAt:["$segment._id", 0]},
+          name: {$arrayElemAt:["$segment.name", 0]},
+          locations: "$locations"}
+        },
+      }
+    },
+  ],function(err, campus) {
+    if (err) {next(err);}
+    if (campus) {
+      res.json(campus);
+    } else {
+      res.status(400).json({message: "Campus not found."});
+    } 
+  });
+});
+
+/* GET SEGMENT BY ID */
+router.get('/API/segment/:id', function(req, res, next) {
+  Segment.aggregate([
+    {$match: {name: req.params.name}},
+    {$lookup:
+      {
+        from: "locations",
+        localField: "locations",
+        foreignField: "_id",
+        as: "locations"
+      }
+    }
+  ],function(err, segment) {
+    if (err) {next(err);}
+    if (segment) {
+      res.json(segment);
+    } else {
+      res.status(400).json({message: "Segment not found."});
+    } 
+  });
+});
+
 /* GET LOCATION BY ID */
 router.get('/API/location/:id', function(req, res, next) {
   Location.findById(req.params.id, function(err, location) {
@@ -282,14 +289,113 @@ router.get('/API/location/:id', function(req, res, next) {
   });
 });
 
+/* GET USER BY NAME */
+router.get('/API/user/name/:name', function(req, res, next) {
+  User.find({name: req.params.name}, function(err, user) {
+    if (err) { return next(err); }
+    if (user[0]) {
+      res.json(user[0]);
+    } else {
+      res.status(400).json({message: "User not found."});
+    }
+  });
+});
+
+/* GET CAMPUS BY NAME */
+router.get('/API/campus/name/:name', function(req, res, next) {
+  Campus.aggregate([
+    {$match: {name: req.params.name}},
+    {$unwind: {"path": "$segments", "preserveNullAndEmptyArrays": true}},
+    {$lookup:
+      {
+        from: "segments",
+        localField: "segments",
+        foreignField: "_id",
+        as: "segment"
+      }
+    },
+    {$lookup:
+      {
+        from: "locations",
+        localField: "segment.locations",
+        foreignField: "_id",
+        as: "locations"
+      }
+    },
+    {
+      $group: {
+        _id: "$_id",
+        name: {$first: "$name"},
+        segments: { $push: {
+          _id: {$arrayElemAt:["$segment._id", 0]},
+          name: {$arrayElemAt:["$segment.name", 0]},
+          locations: "$locations"}
+        },
+      }
+    },
+  ],function(err, campus) {
+    if (err) {next(err);}
+    if (campus) {
+      res.json(campus);
+    } else {
+      res.status(400).json({message: "Campus not found."});
+    } 
+  });
+});
+
+/* GET SEGMENT BY NAME */
+router.get('/API/segment/name/:name', function(req, res, next) {
+  Segment.aggregate([
+    {$match: {name: req.params.name}},
+    {$lookup:
+      {
+        from: "locations",
+        localField: "locations",
+        foreignField: "_id",
+        as: "locations"
+      }
+    }
+  ],function(err, segment) {
+    if (err) {next(err);}
+    if (segment) {
+      res.json(segment);
+    } else {
+      res.status(400).json({message: "Segment not found."});
+    } 
+  });
+});
+
+/* GET LOCATION BY NAME */
+router.get('/API/location/name/:name', function(req, res, next) {
+  Location.find({name: req.params.name}, function(err, location) {
+    if (err) { return next(err); }
+    if (location[0]) {
+      res.json(location[0]);
+    } else {
+      res.status(400).json({message: "Location not found."});
+    }
+  });
+});
+
+/* GET LOCATION WITH STICKER */
+router.get('/API/location/sticker/:sticker', function(req, res, next) {
+  Location.find({stickers: {"$in": [req.params.sticker]}}, function(err, location) {
+    if (err) { return next(err); }
+    if (location) {
+      res.json(location);
+    } else {
+      res.status(400).json({message: "Location not found."});
+    }
+  });
+});
+
+/* LOGIN */
 router.post('/API/login', function(req, res, next) {
   let token = req.body.token;
   verify(token, function(payload) {
     User.findById({_id: payload.email}, function(err, user) {
       if(err) { return next(err); }
-      console.log(user);
-      if(user !== []) {
-        console.log(user);
+      if(user !== null) {
         res.json(user);
       }
       else {

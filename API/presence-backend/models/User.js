@@ -5,7 +5,7 @@ let UserSchema = new mongoose.Schema({
     name: String,
     checkin: {
         location: {
-            type: String,
+            type: mongoose.Schema.Types.ObjectId,
             ref: 'Location',
         },
         time: Number,
