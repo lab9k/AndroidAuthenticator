@@ -28,6 +28,8 @@ import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.Toast;
 
+import com.github.nkzawa.socketio.client.IO;
+import com.github.nkzawa.socketio.client.Socket;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
 import com.google.android.gms.auth.api.signin.GoogleSignInClient;
@@ -49,6 +51,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
@@ -63,6 +66,13 @@ public class MainActivity extends AppCompatActivity {
 
     private FirebaseAuth mAuth;
     private GoogleSignInClient mGoogleSignInClient;
+
+    private Socket mSocket;
+    {
+        try {
+            mSocket = IO.socket("http://agile-everglades-38755.herokuapp.com/");
+        } catch (URISyntaxException e) {}
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,6 +104,8 @@ public class MainActivity extends AppCompatActivity {
         else {
             Log.i("NFC", "NFC is enabled");
         }
+
+        mSocket.connect();
     }
 
     @Override
@@ -144,6 +156,13 @@ public class MainActivity extends AppCompatActivity {
             Intent intent = new Intent(getApplicationContext(), SignInActivity.class);
             startActivity(intent);
         }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+
+        mSocket.disconnect();
     }
 
     private void firebaseAuthWithGoogle(GoogleSignInAccount acct) {
@@ -267,6 +286,7 @@ public class MainActivity extends AppCompatActivity {
                         Log.i("CHECKIN", "Location not in db");
                         return "EnterName";
                     }
+                    EmitCheckin(response);
                     return "Succes";
                 }
                 return "Fail";
@@ -545,4 +565,7 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    private void EmitCheckin(JSONObject user) {
+        mSocket.emit("checkin", user);
+    }
 }
