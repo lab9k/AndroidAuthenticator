@@ -1,18 +1,13 @@
 package com.example.wanne.nfctest;
 
-import android.app.PendingIntent;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
-import android.net.Uri;
-import android.nfc.NdefMessage;
-import android.nfc.NdefRecord;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Handler;
-import android.os.Parcelable;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.support.annotation.NonNull;
@@ -32,8 +27,6 @@ import com.github.nkzawa.socketio.client.IO;
 import com.github.nkzawa.socketio.client.Socket;
 import com.google.android.gms.auth.api.signin.GoogleSignIn;
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
-import com.google.android.gms.auth.api.signin.GoogleSignInClient;
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
 import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
@@ -53,9 +46,8 @@ import java.io.OutputStreamWriter;
 import java.net.HttpURLConnection;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.charset.Charset;
 import java.util.ArrayList;
-import java.util.Locale;
+import java.util.Arrays;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -65,27 +57,20 @@ public class MainActivity extends AppCompatActivity {
     private String stickerid = "";
 
     private FirebaseAuth mAuth;
-    private GoogleSignInClient mGoogleSignInClient;
 
     private Socket mSocket;
     {
         try {
             mSocket = IO.socket("http://agile-everglades-38755.herokuapp.com/");
-        } catch (URISyntaxException e) {}
+        } catch (URISyntaxException e) {
+            Log.i(TAG, e.toString());
+        }
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-        // Configure Google Sign In
-        GoogleSignInOptions gso = new GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-                .requestIdToken(getString(R.string.default_web_client_id))
-                .requestEmail()
-                .build();
-
-        mGoogleSignInClient = GoogleSignIn.getClient(this, gso);
 
         mAuth = FirebaseAuth.getInstance();
 
@@ -134,21 +119,18 @@ public class MainActivity extends AppCompatActivity {
         // Check if user is signed in (non-null) and update UI accordingly.
         FirebaseUser currentUser = mAuth.getCurrentUser();
         if(currentUser != null) {
-            Log.i("USER: onStart", currentUser.getEmail());
             Intent i = getIntent();
             if(i != null ) {
                 byte[] tagId = i.getByteArrayExtra(NfcAdapter.EXTRA_ID);
-                String hexdump = new String();
-                for (int j = 0; j < tagId.length; j++) {
-                    String x = Integer.toHexString(((int) tagId[j] & 0xff));
+                StringBuilder hexdump = new StringBuilder();
+                for (byte aTagId : tagId) {
+                    String x = Integer.toHexString(((int) aTagId & 0xff));
                     if (x.length() == 1) {
                         x = '0' + x;
                     }
-                    hexdump += x + ' ';
+                    hexdump.append(x);
                 }
-                Tag tag = i.getParcelableExtra(NfcAdapter.EXTRA_TAG);
-                Log.i("USER: onStart", tag.getId().toString());
-                new CheckIn().execute(new String[]{currentUser.getEmail(), hexdump.replace(" ", "")});
+                new CheckIn().execute(currentUser.getEmail(), hexdump.toString().replace(" ", ""));
                 getTagInfo(i);
             }
         }
@@ -161,7 +143,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onDestroy() {
         super.onDestroy();
-
         mSocket.disconnect();
     }
 
@@ -176,8 +157,6 @@ public class MainActivity extends AppCompatActivity {
                         if (task.isSuccessful()) {
                             // Sign in success, update UI with the signed-in user's information
                             Log.d(TAG, "signInWithCredential:success");
-                            FirebaseUser user = mAuth.getCurrentUser();
-                            Log.i("USER:firebaseWithGoogle", user.getEmail());
                         } else {
                             // If sign in fails, display a message to the user.
                             Log.w(TAG, "signInWithCredential:failure", task.getException());
@@ -192,35 +171,18 @@ public class MainActivity extends AppCompatActivity {
     private void getTagInfo(Intent intent) {
         Tag tag = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG);
         Log.i("NFC", tag.toString());
-        Log.i("NFC ID", tag.getId().toString());
+        Log.i("NFC ID", Arrays.toString(tag.getId()));
         Log.i("NFC contents", String.valueOf(tag.describeContents()));
     }
 
     private HttpURLConnection createConnection(String api, String method, String[] params, String[] paramNames) {
-        HttpURLConnection urlConnection;
-        URL url;
         JSONObject object = new JSONObject();
 
         try {
-            url = new URL(api);
-            urlConnection = (HttpURLConnection) url.openConnection();
-            urlConnection.setRequestMethod(method);
-
-            urlConnection.setDoInput(true);
-            if(!method.equals("GET")) {
-                urlConnection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-                urlConnection.setDoOutput(true);
-
-                for(int i = 0; i < params.length; i++) {
-                    object.put(paramNames[i], params[i]);
-                }
-
-                OutputStreamWriter wr = new OutputStreamWriter(urlConnection.getOutputStream());
-                wr.write(object.toString());
-                wr.flush();
+            for(int i = 0; i < params.length; i++) {
+                object.put(paramNames[i], params[i]);
             }
-
-            return urlConnection;
+            return createConnection(api, method, object);
         }
         catch (Exception e)
         {
@@ -272,7 +234,7 @@ public class MainActivity extends AppCompatActivity {
 
                 StringBuilder sb = new StringBuilder();
                 int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
-                Log.i("RESULT", String.valueOf(urlConnection.getResponseMessage()));
+                Log.i("RESULT: ", String.valueOf(urlConnection != null ? urlConnection.getResponseMessage() : null));
                 if (HttpResult == HttpURLConnection.HTTP_OK) {
                     BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
                     String line;
@@ -280,10 +242,9 @@ public class MainActivity extends AppCompatActivity {
                         sb.append(line).append("\n");
                     }
                     br.close();
-                    Log.i("SUCCES", sb.toString());
                     JSONObject response = new JSONObject(sb.toString());
                     if(response.has("message") && (response.get("message").equals("New sticker") || response.get("message").equals("Location has no name."))) {
-                        Log.i("CHECKIN", "Location not in db");
+                        Log.i("CHECKIN: ", response.get("message").toString());
                         return "EnterName";
                     }
                     EmitCheckin(response);
@@ -305,13 +266,14 @@ public class MainActivity extends AppCompatActivity {
                 case "Succes":
                     Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
                     // Vibrate for 500 milliseconds
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        v.vibrate(VibrationEffect.createOneShot(500,VibrationEffect.DEFAULT_AMPLITUDE));
-                    }else{
-                        //deprecated in API 26
-                        v.vibrate(500);
+                    if (v != null) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            v.vibrate(VibrationEffect.createOneShot(500,VibrationEffect.DEFAULT_AMPLITUDE));
+                        }else{
+                            //deprecated in API 26
+                            v.vibrate(500);
+                        }
                     }
-                    v.vibrate(500);
                     Toast.makeText(getApplicationContext(), "Succesfully checked in", Toast.LENGTH_SHORT).show();
                     CloseApplication();
                     break;
@@ -355,12 +317,9 @@ public class MainActivity extends AppCompatActivity {
                     }
                     br.close();
                     o = new JSONArray(sb.toString());
-                    for(int i = 0; i<o.length();i++) {
-                        Log.i("SUCCES", new JSONObject(o.get(i).toString()).getString("name"));
-                    }
                     return "Succes";
                 }
-                Log.i("FAIL", String.valueOf(urlConnection.getResponseCode()));
+                Log.i("FAIL", String.valueOf(urlConnection != null ? urlConnection.getResponseCode() : 0));
                 return "Fail";
             }
             catch (Exception e)
@@ -401,11 +360,10 @@ public class MainActivity extends AppCompatActivity {
                 public void onClick(DialogInterface dialog, int whichButton) {
                     String location = edt.getText().toString();
                     String t = spin.getSelectedItem().toString();
-                    ArrayList<String> stickers = new ArrayList<String>();
+                    ArrayList<String> stickers = new ArrayList<>();
                     stickers.add(stickerid);
                     if(!location.equals("")) {
                         //Create Location
-                        Log.i("CREATE LOCATION", location);
                         JSONObject object = new JSONObject();
                         try {
                             object.put("name", location);
@@ -417,7 +375,6 @@ public class MainActivity extends AppCompatActivity {
                     }
                     else if(!t.equals("")) {
                         //Add to existing location
-                        Log.i("ADDTO EXISTING LOCATION", t);
                         for(int i = 1; i<o.length()+1;i++) {
                             try {
                                 JSONObject loc = new JSONObject(o.get(i).toString());
@@ -474,10 +431,9 @@ public class MainActivity extends AppCompatActivity {
                         sb.append(line).append("\n");
                     }
                     br.close();
-                    Log.i("SUCCES", sb.toString());
                     return "Succes";
                 }
-                Log.i("FAIL", String.valueOf(urlConnection.getResponseCode()));
+                Log.i("FAIL", String.valueOf(urlConnection != null ? urlConnection.getResponseCode() : 0));
                 return "Fail";
             }
             catch (Exception e)
@@ -523,10 +479,9 @@ public class MainActivity extends AppCompatActivity {
                         sb.append(line).append("\n");
                     }
                     br.close();
-                    Log.i("SUCCES", sb.toString());
                     return "Succes";
                 }
-                Log.i("FAIL", String.valueOf(urlConnection.getResponseCode()));
+                Log.i("FAIL", String.valueOf(urlConnection != null ? urlConnection.getResponseCode() : 0));
                 return "Fail";
             }
             catch (Exception e)
