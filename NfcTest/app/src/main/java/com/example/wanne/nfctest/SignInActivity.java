@@ -1,9 +1,6 @@
 package com.example.wanne.nfctest;
 
-import android.app.ProgressDialog;
 import android.content.Intent;
-import android.nfc.NfcAdapter;
-import android.nfc.Tag;
 import android.support.annotation.NonNull;
 import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
