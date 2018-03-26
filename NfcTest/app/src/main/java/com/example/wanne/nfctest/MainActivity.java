@@ -3,6 +3,7 @@ package com.example.wanne.nfctest;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.net.Uri;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.os.AsyncTask;
@@ -10,8 +11,6 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
-import android.support.annotation.NonNull;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -21,42 +20,37 @@ import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.github.nkzawa.socketio.client.IO;
 import com.github.nkzawa.socketio.client.Socket;
-import com.google.android.gms.auth.api.signin.GoogleSignIn;
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
-import com.google.android.gms.common.api.ApiException;
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
-import com.google.firebase.auth.AuthCredential;
-import com.google.firebase.auth.AuthResult;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.auth.GoogleAuthProvider;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GoogleActivity";
     NfcAdapter mAdapter;
-    private static final int RC_SIGN_IN = 9001;
     private String stickerid = "";
-
-    private FirebaseAuth mAuth;
+    private static String uniqueID;
 
     private Socket mSocket;
     {
@@ -72,8 +66,21 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mAuth = FirebaseAuth.getInstance();
+        uniqueID = readFile("UUID");
+        if(uniqueID.isEmpty()) {
+            String filename = "UUID";
+            String fileContents = UUID.randomUUID().toString();
+            FileOutputStream outputStream;
 
+            try {
+                outputStream = openFileOutput(filename, Context.MODE_PRIVATE);
+                outputStream.write(fileContents.getBytes());
+                outputStream.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        Log.i("ID", uniqueID);
         mAdapter = NfcAdapter.getDefaultAdapter(this);
 
         if( mAdapter == null) {
@@ -91,52 +98,27 @@ public class MainActivity extends AppCompatActivity {
         }
 
         mSocket.connect();
-    }
-
-    @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-
-        // Result returned from launching the Intent from GoogleSignInApi.getSignInIntent(...);
-        if (requestCode == RC_SIGN_IN) {
-            Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
-            try {
-                // Google Sign In was successful, authenticate with Firebase
-                GoogleSignInAccount account = task.getResult(ApiException.class);
-                firebaseAuthWithGoogle(account);
-            } catch (ApiException e) {
-                // Google Sign In failed, update UI appropriately
-                Log.w(TAG, "Google sign in failed", e);
-                Intent intent = new Intent(getApplicationContext(), SignInActivity.class);
-                startActivity(intent);
-            }
-        }
+        new FindUser().execute();
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        // Check if user is signed in (non-null) and update UI accordingly.
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if(currentUser != null) {
-            Intent i = getIntent();
-            if(i != null ) {
-                byte[] tagId = i.getByteArrayExtra(NfcAdapter.EXTRA_ID);
-                StringBuilder hexdump = new StringBuilder();
-                for (byte aTagId : tagId) {
-                    String x = Integer.toHexString(((int) aTagId & 0xff));
-                    if (x.length() == 1) {
-                        x = '0' + x;
-                    }
-                    hexdump.append(x);
+
+        Intent i = getIntent();
+        if(i != null ) {
+            byte[] tagId = i.getByteArrayExtra(NfcAdapter.EXTRA_ID);
+            StringBuilder hexdump = new StringBuilder();
+            for (byte aTagId : tagId) {
+                String x = Integer.toHexString(((int) aTagId & 0xff));
+                if (x.length() == 1) {
+                    x = '0' + x;
                 }
-                new CheckIn().execute(currentUser.getEmail(), hexdump.toString().replace(" ", ""));
-                getTagInfo(i);
+                hexdump.append(x);
             }
-        }
-        else {
-            Intent intent = new Intent(getApplicationContext(), SignInActivity.class);
-            startActivity(intent);
+            stickerid = hexdump.toString();
+            getTagInfo(i);
+            new FindUser().execute();
         }
     }
 
@@ -146,26 +128,24 @@ public class MainActivity extends AppCompatActivity {
         mSocket.disconnect();
     }
 
-    private void firebaseAuthWithGoogle(GoogleSignInAccount acct) {
-        Log.d(TAG, "firebaseAuthWithGoogle:" + acct.getId());
-
-        AuthCredential credential = GoogleAuthProvider.getCredential(acct.getIdToken(), null);
-        mAuth.signInWithCredential(credential)
-                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            // Sign in success, update UI with the signed-in user's information
-                            Log.d(TAG, "signInWithCredential:success");
-                        } else {
-                            // If sign in fails, display a message to the user.
-                            Log.w(TAG, "signInWithCredential:failure", task.getException());
-                            Snackbar.make(findViewById(R.id.main_layout), "Authentication Failed.", Snackbar.LENGTH_SHORT).show();
-                            Intent intent = new Intent(getApplicationContext(), SignInActivity.class);
-                            startActivity(intent);
-                        }
-                    }
-                });
+    private String readFile(String filename) {
+        try {
+            FileInputStream fis = openFileInput(filename);
+            InputStreamReader isr = new InputStreamReader(fis, "UTF-8");
+            BufferedReader bufferedReader = new BufferedReader(isr);
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = bufferedReader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+            return sb.toString();
+        } catch (FileNotFoundException e) {
+            return "";
+        } catch (UnsupportedEncodingException e) {
+            return "";
+        } catch (IOException e) {
+            return "";
+        }
     }
 
     private void getTagInfo(Intent intent) {
@@ -503,6 +483,76 @@ public class MainActivity extends AppCompatActivity {
                     break;
             }
             CloseApplication();
+        }
+    }
+
+    private class FindUser extends AsyncTask<String, Void, String> {
+
+        String api = "http://10.0.2.2:5000/API/user/phoneid/" + uniqueID;
+        Exception mException = null;
+        StringBuilder sb = new StringBuilder();
+
+        @Override
+        protected String doInBackground(String... strings) {
+            HttpURLConnection urlConnection;
+            Log.i("FINDUSER", "start");
+            try {
+                urlConnection = createConnection(api, "GET", null);
+
+                int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
+                if (HttpResult == HttpURLConnection.HTTP_OK) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        sb.append(line).append("\n");
+                    }
+                    br.close();
+                    Log.i("SUCCES", sb.toString());
+                    return "Succes";
+                }
+                Log.i("FAIL", "failed");
+                return "Fail";
+            }
+            catch (Exception e)
+            {
+                Log.i("FIND USER", e.toString());
+                this.mException = e;
+                return "Exception";
+            }
+        }
+
+        @Override
+        protected void onPostExecute(String result) {
+            switch(result) {
+                case "Succes":
+                    //new CheckIn().execute();
+                    break;
+                case "Fail":
+                    //Open browser to add phoneid to account
+                    showDialog();
+                    break;
+            }
+        }
+
+        private void showDialog() {
+            AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(MainActivity.this);
+            LayoutInflater inflater = MainActivity.this.getLayoutInflater();
+            final View dialogView = inflater.inflate(R.layout.show_phoneid_dialog, null);
+            dialogBuilder.setView(dialogView);
+
+            final TextView txt = dialogView.findViewById(R.id.textPhoneId);
+            txt.setText(uniqueID);
+            txt.setTextIsSelectable(true);
+
+            dialogBuilder.setTitle("First time setup");
+            dialogBuilder.setMessage("Copy this code, go to https://agile-everglades-38755.herokuapp.com/ and add it to phoneid in your profile.");
+            dialogBuilder.setNeutralButton("Done", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int whichButton) {
+
+                }
+            });
+            AlertDialog b = dialogBuilder.create();
+            b.show();
         }
     }
 
