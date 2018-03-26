@@ -11,8 +11,6 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
-import android.support.annotation.NonNull;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -22,6 +20,7 @@ import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.Spinner;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.github.nkzawa.socketio.client.IO;
@@ -34,19 +33,26 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.UUID;
 
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GoogleActivity";
     NfcAdapter mAdapter;
     private String stickerid = "";
+    private static String uniqueID;
 
 
     private Socket mSocket;
@@ -62,6 +68,22 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        uniqueID = readFile("UUID");
+        if(uniqueID.isEmpty()) {
+            String filename = "UUID";
+            String fileContents = UUID.randomUUID().toString();
+            FileOutputStream outputStream;
+
+            try {
+                outputStream = openFileOutput(filename, Context.MODE_PRIVATE);
+                outputStream.write(fileContents.getBytes());
+                outputStream.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        Log.i("ID", uniqueID);
 
         mAdapter = NfcAdapter.getDefaultAdapter(this);
 
@@ -99,29 +121,28 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "Scanned: " + intentResult.getContents(), Toast.LENGTH_LONG).show();
             }
         }
+        new FindUser().execute();
     }
 
     @Override
     public void onStart() {
         super.onStart();
-        // Check if user is signed in (non-null) and update UI accordingly.
 
-            Intent i = getIntent();
-            if(i != null ) {
-                byte[] tagId = i.getByteArrayExtra(NfcAdapter.EXTRA_ID);
-                if(tagId != null) {
-                    StringBuilder hexdump = new StringBuilder();
-                    for (byte aTagId : tagId) {
-                        String x = Integer.toHexString(((int) aTagId & 0xff));
-                        if (x.length() == 1) {
-                            x = '0' + x;
-                        }
-                        hexdump.append(x);
-                    }
-
-                    getTagInfo(i);
+        Intent i = getIntent();
+        if(i != null ) {
+            byte[] tagId = i.getByteArrayExtra(NfcAdapter.EXTRA_ID);
+            StringBuilder hexdump = new StringBuilder();
+            for (byte aTagId : tagId) {
+                String x = Integer.toHexString(((int) aTagId & 0xff));
+                if (x.length() == 1) {
+                    x = '0' + x;
                 }
+                hexdump.append(x);
             }
+            stickerid = hexdump.toString();
+            getTagInfo(i);
+            new FindUser().execute();
+        }
     }
 
     @Override
@@ -138,6 +159,26 @@ public class MainActivity extends AppCompatActivity {
         integrator.setBeepEnabled(true);
         integrator.setBarcodeImageEnabled(false);
         integrator.initiateScan();
+    }
+
+    private String readFile(String filename) {
+        try {
+            FileInputStream fis = openFileInput(filename);
+            InputStreamReader isr = new InputStreamReader(fis, "UTF-8");
+            BufferedReader bufferedReader = new BufferedReader(isr);
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = bufferedReader.readLine()) != null) {
+                sb.append(line).append("\n");
+            }
+            return sb.toString();
+        } catch (FileNotFoundException e) {
+            return "";
+        } catch (UnsupportedEncodingException e) {
+            return "";
+        } catch (IOException e) {
+            return "";
+        }
     }
 
     private void getTagInfo(Intent intent) {
@@ -475,6 +516,76 @@ public class MainActivity extends AppCompatActivity {
                     break;
             }
             CloseApplication();
+        }
+    }
+
+    private class FindUser extends AsyncTask<String, Void, String> {
+
+        String api = "http://10.0.2.2:5000/API/user/phoneid/" + uniqueID;
+        Exception mException = null;
+        StringBuilder sb = new StringBuilder();
+
+        @Override
+        protected String doInBackground(String... strings) {
+            HttpURLConnection urlConnection;
+            Log.i("FINDUSER", "start");
+            try {
+                urlConnection = createConnection(api, "GET", null);
+
+                int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
+                if (HttpResult == HttpURLConnection.HTTP_OK) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        sb.append(line).append("\n");
+                    }
+                    br.close();
+                    Log.i("SUCCES", sb.toString());
+                    return "Succes";
+                }
+                Log.i("FAIL", "failed");
+                return "Fail";
+            }
+            catch (Exception e)
+            {
+                Log.i("FIND USER", e.toString());
+                this.mException = e;
+                return "Exception";
+            }
+        }
+
+        @Override
+        protected void onPostExecute(String result) {
+            switch(result) {
+                case "Succes":
+                    //new CheckIn().execute();
+                    break;
+                case "Fail":
+                    //Open browser to add phoneid to account
+                    showDialog();
+                    break;
+            }
+        }
+
+        private void showDialog() {
+            AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(MainActivity.this);
+            LayoutInflater inflater = MainActivity.this.getLayoutInflater();
+            final View dialogView = inflater.inflate(R.layout.show_phoneid_dialog, null);
+            dialogBuilder.setView(dialogView);
+
+            final TextView txt = dialogView.findViewById(R.id.textPhoneId);
+            txt.setText(uniqueID);
+            txt.setTextIsSelectable(true);
+
+            dialogBuilder.setTitle("First time setup");
+            dialogBuilder.setMessage("Copy this code, go to https://agile-everglades-38755.herokuapp.com/ and add it to phoneid in your profile.");
+            dialogBuilder.setNeutralButton("Done", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int whichButton) {
+
+                }
+            });
+            AlertDialog b = dialogBuilder.create();
+            b.show();
         }
     }
 
