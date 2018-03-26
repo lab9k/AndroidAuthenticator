@@ -3,6 +3,7 @@ package com.example.wanne.nfctest;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.net.Uri;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
 import android.os.AsyncTask;
@@ -25,16 +26,8 @@ import android.widget.Toast;
 
 import com.github.nkzawa.socketio.client.IO;
 import com.github.nkzawa.socketio.client.Socket;
-import com.google.android.gms.auth.api.signin.GoogleSignIn;
-import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
-import com.google.android.gms.common.api.ApiException;
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
-import com.google.firebase.auth.AuthCredential;
-import com.google.firebase.auth.AuthResult;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
-import com.google.firebase.auth.GoogleAuthProvider;
+import com.google.zxing.integration.android.IntentIntegrator;
+import com.google.zxing.integration.android.IntentResult;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -53,10 +46,8 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "GoogleActivity";
     NfcAdapter mAdapter;
-    private static final int RC_SIGN_IN = 9001;
     private String stickerid = "";
 
-    private FirebaseAuth mAuth;
 
     private Socket mSocket;
     {
@@ -72,18 +63,15 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mAuth = FirebaseAuth.getInstance();
-
         mAdapter = NfcAdapter.getDefaultAdapter(this);
 
         if( mAdapter == null) {
             //nfc not supported on device
             Toast.makeText(this, "This device doesn't support NFC.", Toast.LENGTH_LONG).show();
-            finish();
-            return;
+            scanQR();
         }
 
-        if(!mAdapter.isEnabled()) {
+        if(mAdapter != null && !mAdapter.isEnabled()) {
             Log.i("NFC", "NFC is disabled");
         }
         else {
@@ -94,21 +82,21 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-
-        // Result returned from launching the Intent from GoogleSignInApi.getSignInIntent(...);
-        if (requestCode == RC_SIGN_IN) {
-            Task<GoogleSignInAccount> task = GoogleSignIn.getSignedInAccountFromIntent(data);
-            try {
-                // Google Sign In was successful, authenticate with Firebase
-                GoogleSignInAccount account = task.getResult(ApiException.class);
-                firebaseAuthWithGoogle(account);
-            } catch (ApiException e) {
-                // Google Sign In failed, update UI appropriately
-                Log.w(TAG, "Google sign in failed", e);
-                Intent intent = new Intent(getApplicationContext(), SignInActivity.class);
-                startActivity(intent);
+        IntentResult intentResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, data);
+        if(intentResult != null) {
+            if(intentResult.getContents() == null) {
+                Log.d("MainActivity", "Cancelled");
+                Toast.makeText(this, "Cancelled", Toast.LENGTH_LONG).show();
+            }
+            else {
+                Log.d("MainActivity", "Scanned");
+                Log.d("MainActivity", intentResult.getContents().substring(intentResult.getContents().length()-1));
+                //new CheckIn().execute(editId.getText().toString(), intentResult.getContents().substring(intentResult.getContents().length()-1));
+                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(intentResult.getContents().toLowerCase().replaceAll("localhost:4200", "virtualhost:4200")));
+                startActivity(browserIntent);
+                Toast.makeText(this, "Scanned: " + intentResult.getContents(), Toast.LENGTH_LONG).show();
             }
         }
     }
@@ -117,27 +105,23 @@ public class MainActivity extends AppCompatActivity {
     public void onStart() {
         super.onStart();
         // Check if user is signed in (non-null) and update UI accordingly.
-        FirebaseUser currentUser = mAuth.getCurrentUser();
-        if(currentUser != null) {
+
             Intent i = getIntent();
             if(i != null ) {
                 byte[] tagId = i.getByteArrayExtra(NfcAdapter.EXTRA_ID);
-                StringBuilder hexdump = new StringBuilder();
-                for (byte aTagId : tagId) {
-                    String x = Integer.toHexString(((int) aTagId & 0xff));
-                    if (x.length() == 1) {
-                        x = '0' + x;
+                if(tagId != null) {
+                    StringBuilder hexdump = new StringBuilder();
+                    for (byte aTagId : tagId) {
+                        String x = Integer.toHexString(((int) aTagId & 0xff));
+                        if (x.length() == 1) {
+                            x = '0' + x;
+                        }
+                        hexdump.append(x);
                     }
-                    hexdump.append(x);
+
+                    getTagInfo(i);
                 }
-                new CheckIn().execute(currentUser.getEmail(), hexdump.toString().replace(" ", ""));
-                getTagInfo(i);
             }
-        }
-        else {
-            Intent intent = new Intent(getApplicationContext(), SignInActivity.class);
-            startActivity(intent);
-        }
     }
 
     @Override
@@ -146,26 +130,14 @@ public class MainActivity extends AppCompatActivity {
         mSocket.disconnect();
     }
 
-    private void firebaseAuthWithGoogle(GoogleSignInAccount acct) {
-        Log.d(TAG, "firebaseAuthWithGoogle:" + acct.getId());
-
-        AuthCredential credential = GoogleAuthProvider.getCredential(acct.getIdToken(), null);
-        mAuth.signInWithCredential(credential)
-                .addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
-                    @Override
-                    public void onComplete(@NonNull Task<AuthResult> task) {
-                        if (task.isSuccessful()) {
-                            // Sign in success, update UI with the signed-in user's information
-                            Log.d(TAG, "signInWithCredential:success");
-                        } else {
-                            // If sign in fails, display a message to the user.
-                            Log.w(TAG, "signInWithCredential:failure", task.getException());
-                            Snackbar.make(findViewById(R.id.main_layout), "Authentication Failed.", Snackbar.LENGTH_SHORT).show();
-                            Intent intent = new Intent(getApplicationContext(), SignInActivity.class);
-                            startActivity(intent);
-                        }
-                    }
-                });
+    private void scanQR() {
+        IntentIntegrator integrator = new IntentIntegrator(MainActivity.this);
+        integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE_TYPES);
+        integrator.setPrompt("Scan Code");
+        integrator.setCameraId(0);
+        integrator.setBeepEnabled(true);
+        integrator.setBarcodeImageEnabled(false);
+        integrator.initiateScan();
     }
 
     private void getTagInfo(Intent intent) {
