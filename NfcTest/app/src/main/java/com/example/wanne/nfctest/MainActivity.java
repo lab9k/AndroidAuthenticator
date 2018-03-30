@@ -1,5 +1,7 @@
 package com.example.wanne.nfctest;
 
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -11,6 +13,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.support.v4.app.NotificationCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -53,12 +56,13 @@ public class MainActivity extends AppCompatActivity {
     NfcAdapter mAdapter;
     private String stickerid = "";
     private static String uniqueID;
-
+    private static String site = "http://10.0.2.2:5000";
+    //private static String site = "https://agile-everglades-38755.herokuapp.com";
 
     private Socket mSocket;
     {
         try {
-            mSocket = IO.socket("http://agile-everglades-38755.herokuapp.com/");
+            mSocket = IO.socket(site);
         } catch (URISyntaxException e) {
             Log.i(TAG, e.toString());
         }
@@ -89,15 +93,18 @@ public class MainActivity extends AppCompatActivity {
 
         if( mAdapter == null) {
             //nfc not supported on device
-            Toast.makeText(this, "This device doesn't support NFC.", Toast.LENGTH_LONG).show();
             scanQR();
         }
 
         if(mAdapter != null && !mAdapter.isEnabled()) {
             Log.i("NFC", "NFC is disabled");
+            scanQR();
         }
         else {
             Log.i("NFC", "NFC is enabled");
+            if(getIntent().getAction().equals(Intent.ACTION_MAIN) && mAdapter != null) {
+                showDialog();
+            }
         }
 
         mSocket.connect();
@@ -114,14 +121,11 @@ public class MainActivity extends AppCompatActivity {
             }
             else {
                 Log.d("MainActivity", "Scanned");
-                Log.d("MainActivity", intentResult.getContents().substring(intentResult.getContents().length()-1));
-                //new CheckIn().execute(editId.getText().toString(), intentResult.getContents().substring(intentResult.getContents().length()-1));
-                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(intentResult.getContents().toLowerCase().replaceAll("localhost:4200", "virtualhost:4200")));
-                startActivity(browserIntent);
-                Toast.makeText(this, "Scanned: " + intentResult.getContents(), Toast.LENGTH_LONG).show();
-            }
+                Log.d("MainActivity", intentResult.getContents());
+                stickerid = intentResult.getContents();
+                Log.i("start", "2");
+                new FindUser().execute();}
         }
-        new FindUser().execute();
     }
 
     @Override
@@ -132,16 +136,19 @@ public class MainActivity extends AppCompatActivity {
         if(i != null ) {
             byte[] tagId = i.getByteArrayExtra(NfcAdapter.EXTRA_ID);
             StringBuilder hexdump = new StringBuilder();
-            for (byte aTagId : tagId) {
-                String x = Integer.toHexString(((int) aTagId & 0xff));
-                if (x.length() == 1) {
-                    x = '0' + x;
+            if(tagId != null) {
+                for (byte aTagId : tagId) {
+                    String x = Integer.toHexString(((int) aTagId & 0xff));
+                    if (x.length() == 1) {
+                        x = '0' + x;
+                    }
+                    hexdump.append(x);
                 }
-                hexdump.append(x);
+                stickerid = hexdump.toString();
+                getTagInfo(i);
+                Log.i("start", "start");
+                new FindUser().execute();
             }
-            stickerid = hexdump.toString();
-            getTagInfo(i);
-            new FindUser().execute();
         }
     }
 
@@ -151,7 +158,31 @@ public class MainActivity extends AppCompatActivity {
         mSocket.disconnect();
     }
 
+    private void showDialog() {
+        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(MainActivity.this);
+        LayoutInflater inflater = MainActivity.this.getLayoutInflater();
+        final View dialogView = inflater.inflate(R.layout.show_phoneid_dialog, null);
+        dialogBuilder.setView(dialogView);
+
+        dialogBuilder.setTitle("App opened");
+        dialogBuilder.setMessage("Scan a nfc tag to checkin OR checkin in with QR.:");
+        dialogBuilder.setPositiveButton("Use QR", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int whichButton) {
+                scanQR();
+            }
+        });
+        dialogBuilder.setNegativeButton("Close", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int whichButton) {
+                //pass
+                CloseApplication();
+            }
+        });
+        AlertDialog b = dialogBuilder.create();
+        b.show();
+    }
+
     private void scanQR() {
+        Log.i("open", "scan qr");
         IntentIntegrator integrator = new IntentIntegrator(MainActivity.this);
         integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE_TYPES);
         integrator.setPrompt("Scan Code");
@@ -233,7 +264,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private class CheckIn extends AsyncTask<String, Void, String> {
-        String api = "http://agile-everglades-38755.herokuapp.com/API/checkin/";
+        String api = site + "/API/checkin/";
         String[] paramNames = new String[]{"userid", "locationid"};
         Exception mException = null;
 
@@ -308,7 +339,7 @@ public class MainActivity extends AppCompatActivity {
 
     private class GetLocations extends AsyncTask<String, Void, String> {
 
-        String api = "http://agile-everglades-38755.herokuapp.com/API/locations/";
+        String api = site + "/API/locations/";
         String[] paramNames = new String[]{};
         Exception mException = null;
         JSONArray o;
@@ -425,7 +456,7 @@ public class MainActivity extends AppCompatActivity {
 
     private class CreateLocation extends AsyncTask<JSONObject, Void, String> {
 
-        String api = "http://agile-everglades-38755.herokuapp.com/API/location/";
+        String api = site + "/API/location/";
         Exception mException = null;
 
         @Override
@@ -473,7 +504,7 @@ public class MainActivity extends AppCompatActivity {
 
     private class AddToLocation extends AsyncTask<JSONObject, Void, String> {
 
-        String api = "http://agile-everglades-38755.herokuapp.com/API/location/";
+        String api = site + "/API/location/";
         Exception mException = null;
 
         @Override
@@ -521,7 +552,7 @@ public class MainActivity extends AppCompatActivity {
 
     private class FindUser extends AsyncTask<String, Void, String> {
 
-        String api = "http://10.0.2.2:5000/API/user/phoneid/" + uniqueID;
+        String api = site + "/API/user/phoneid/" + uniqueID;
         Exception mException = null;
         StringBuilder sb = new StringBuilder();
 
@@ -558,35 +589,49 @@ public class MainActivity extends AppCompatActivity {
         protected void onPostExecute(String result) {
             switch(result) {
                 case "Succes":
-                    //new CheckIn().execute();
+                    try {
+                        JSONObject o = new JSONArray(sb.toString()).getJSONObject(0);
+                        if(!o.get("messages").toString().equals("[]")) {
+                            JSONArray messages = o.getJSONArray("messages");
+                            for(int i = 0; i < messages.length(); i++) {
+                                JSONObject message = messages.getJSONObject(i);
+                                Log.i("message", message.toString());
+                                Log.i("isRead", String.valueOf(message.getBoolean("isRead")));
+                                if(!message.getBoolean("isRead")) {
+                                    //show push notification
+                                    JSONObject sender = message.getJSONObject("sender");
+                                    Log.i("message", sender.toString());
+                                    NotificationCompat.Builder mBuilder = new NotificationCompat.Builder(getApplicationContext(), "NfcTestChannelID")
+                                            .setSmallIcon(R.drawable.ic_message_black_24dp)
+                                            .setContentTitle(sender.getString("name") + ": " + message.getString("subject"))
+                                            .setContentText(message.getString("content"))
+                                            .setPriority(NotificationCompat.PRIORITY_DEFAULT);
+                                    Intent intent = new Intent(getApplicationContext(), MainActivity.class);
+                                    PendingIntent pi = PendingIntent.getActivity(getApplicationContext(),0,intent,Intent.FILL_IN_ACTION);
+                                    mBuilder.setContentIntent(pi);
+                                    NotificationManager mNotificationManager =
+                                            (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                                    mNotificationManager.notify(0, mBuilder.build());
+                                }
+                            }
+
+                        }
+                        new CheckIn().execute(o.getString("_id"), stickerid);
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+
                     break;
                 case "Fail":
                     //Open browser to add phoneid to account
-                    showDialog();
+                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site + "/login/register/" + uniqueID));
+                    startActivity(browserIntent);
+                    CloseApplication();
+                    //showDialog();
                     break;
             }
         }
 
-        private void showDialog() {
-            AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(MainActivity.this);
-            LayoutInflater inflater = MainActivity.this.getLayoutInflater();
-            final View dialogView = inflater.inflate(R.layout.show_phoneid_dialog, null);
-            dialogBuilder.setView(dialogView);
-
-            final TextView txt = dialogView.findViewById(R.id.textPhoneId);
-            txt.setText(uniqueID);
-            txt.setTextIsSelectable(true);
-
-            dialogBuilder.setTitle("First time setup");
-            dialogBuilder.setMessage("Copy this code, go to https://agile-everglades-38755.herokuapp.com/ and add it to phoneid in your profile.");
-            dialogBuilder.setNeutralButton("Done", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface dialog, int whichButton) {
-
-                }
-            });
-            AlertDialog b = dialogBuilder.create();
-            b.show();
-        }
     }
 
     private void CloseApplication() {
