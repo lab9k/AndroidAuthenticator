@@ -1,8 +1,0 @@
-<resources>
-    <string name="app_name">NfcTest</string>
-    <string name="client_id">780736623262-mj0iv3oftalmpeujfa494j6ksk0vp6bc.apps.googleusercontent.com</string>
-    <string name="signed_out">Signed Out</string>
-    <string name="sign_out">Sign Out</string>
-    <string name="disconnect">Disconnect</string>
-    <string name="sign_in">Sign In</string>
-</resources>
