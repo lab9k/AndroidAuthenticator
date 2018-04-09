@@ -22,6 +22,7 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.Spinner;
@@ -393,6 +394,7 @@ public class MainActivity extends AppCompatActivity {
 
             final EditText edt = dialogView.findViewById(R.id.editLocation);
             final Spinner spin = dialogView.findViewById((R.id.spinnerLocations));
+            final CheckBox doNotDisturbCheck = dialogView.findViewById(R.id.checkDoNotDisturb);
             String[] items = new String[o.length()+1];
             items[0] = "";
             for(int i = 1; i<o.length()+1;i++) {
@@ -405,11 +407,12 @@ public class MainActivity extends AppCompatActivity {
             ArrayAdapter<String> adapter = new ArrayAdapter<>(getApplicationContext(), android.R.layout.simple_spinner_dropdown_item, items);
             spin.setAdapter(adapter);
             dialogBuilder.setTitle("New Sticker Scanned");
-            dialogBuilder.setMessage("Add to existing location OR Create new location:");
+            //dialogBuilder.setMessage("Add to existing location OR Create new location:");
             dialogBuilder.setPositiveButton("Done", new DialogInterface.OnClickListener() {
                 public void onClick(DialogInterface dialog, int whichButton) {
                     String location = edt.getText().toString();
                     String t = spin.getSelectedItem().toString();
+                    Boolean doNotDisturb = doNotDisturbCheck.isChecked();
                     ArrayList<String> stickers = new ArrayList<>();
                     stickers.add(stickerid);
                     if(!location.equals("")) {
@@ -418,6 +421,7 @@ public class MainActivity extends AppCompatActivity {
                         try {
                             object.put("name", location);
                             object.put("stickers", new JSONArray(stickers));
+                            object.put("doNotDisturb", doNotDisturb);
                             new CreateLocation().execute(object);
                         } catch (JSONException e) {
                             e.printStackTrace();
