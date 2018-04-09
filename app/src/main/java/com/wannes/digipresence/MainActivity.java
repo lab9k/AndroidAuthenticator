@@ -23,6 +23,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
+import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.Toast;
 
@@ -58,6 +59,7 @@ public class MainActivity extends AppCompatActivity {
     private static String uniqueID;
     //private static String site = "http://10.0.2.2:5000";
     private static String site = "https://agile-everglades-38755.herokuapp.com";
+    private ProgressBar spinner;
 
     private Socket mSocket;
     {
@@ -72,7 +74,8 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
+        spinner = findViewById(R.id.progressBar1);
+        spinner.setVisibility(View.VISIBLE);
         uniqueID = readFile("UUID");
         if(uniqueID.isEmpty()) {
             String filename = "UUID";
@@ -248,7 +251,7 @@ public class MainActivity extends AppCompatActivity {
             urlConnection.setRequestMethod(method);
 
             urlConnection.setDoInput(true);
-            if(!method.equals("GET")) {
+            if(!method.equals("GET") && !method.equals("DELETE")) {
                 urlConnection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
                 urlConnection.setDoOutput(true);
 
@@ -632,13 +635,20 @@ public class MainActivity extends AppCompatActivity {
                                         if (mNotificationManager != null) {
                                             mNotificationManager.notify(0, mBuilder.build());
                                         }
+                                        message.put("isRead", true);
+                                        new SetIsRead().execute(message);
                                     }
                                 }
                             }
-                            new CheckIn().execute(o.getString("_id"), stickerid);
+                            if(o.isNull("checkin")) {
+                                new CheckIn().execute(o.getString("_id"), stickerid);
+                            }
+                            else {
+                                new GetLocation().execute(o.getJSONObject("checkin").getString("location"), o.getString("_id"));
+                            }
                         }
                         else {
-                            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site + "/login/register/" + uniqueID));
+                            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site + "/account/register/" + uniqueID));
                             startActivity(browserIntent);
                             CloseApplication();
                         }
@@ -650,7 +660,7 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 case "Fail":
                     //Open browser to add phoneid to account
-                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site + "/login/register/" + uniqueID));
+                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site + "/account/register/" + uniqueID));
                     startActivity(browserIntent);
                     CloseApplication();
                     //showDialog();
@@ -660,7 +670,211 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
+    private class GetLocation extends AsyncTask<String, Void, String> {
+
+        String api = site + "/API/location/";
+        Exception mException = null;
+        StringBuilder sb = new StringBuilder();
+        String userid;
+        String locationid;
+
+        @Override
+        protected String doInBackground(String... strings) {
+            locationid = strings[0];
+            userid = strings[1];
+            HttpURLConnection urlConnection;
+            Log.i("GETLOCATION", "start");
+            try {
+                urlConnection = createConnection(api + locationid, "GET", null);
+
+                int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
+                if (HttpResult == HttpURLConnection.HTTP_OK) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        sb.append(line).append("\n");
+                    }
+                    br.close();
+                    if(!sb.toString().equals("[]")) {
+                        Log.i("SUCCES", sb.toString());
+                        return "Succes";
+                    }
+                }
+                Log.i("FAIL", "failed");
+                return "Fail";
+            }
+            catch (Exception e)
+            {
+                Log.i("FIND USER", e.toString());
+                this.mException = e;
+                return "Exception";
+            }
+        }
+
+        @Override
+        protected void onPostExecute(String result) {
+            switch(result) {
+                case "Succes":
+                    try {
+                        JSONObject location = new JSONObject(sb.toString());
+                        JSONArray stickers = location.getJSONArray("stickers");
+                        boolean sameLocation = false;
+                        for(int i = 0; i < stickers.length(); i++) {
+                            if(stickers.get(i).equals(stickerid)) {
+                                //Checkin in same location
+                                sameLocation = true;
+                            }
+                        }
+                        if(sameLocation) {
+                            showRemoveCheckinDialog();
+                        }
+                        else {
+                            new CheckIn().execute(userid, stickerid);
+                        }
+
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+
+                    break;
+                case "Fail":
+                    //Open browser to add phoneid to account
+                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site + "/account/register/" + uniqueID));
+                    startActivity(browserIntent);
+                    CloseApplication();
+                    //showDialog();
+                    break;
+            }
+        }
+
+        private void showRemoveCheckinDialog() {
+            AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(MainActivity.this);
+            LayoutInflater inflater = MainActivity.this.getLayoutInflater();
+            final View dialogView = inflater.inflate(R.layout.show_phoneid_dialog, null);
+            dialogBuilder.setView(dialogView);
+
+            dialogBuilder.setTitle("Checkin");
+            dialogBuilder.setMessage("Checked in to the same location twice.");
+            dialogBuilder.setPositiveButton("Checkout", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int whichButton) {
+                    new RemoveCheckin().execute(userid);
+                }
+            });
+            dialogBuilder.setNegativeButton("Checkin again", new DialogInterface.OnClickListener() {
+                public void onClick(DialogInterface dialog, int whichButton) {
+                    //pass
+                    new CheckIn().execute(userid, stickerid);
+                }
+            });
+            AlertDialog b = dialogBuilder.create();
+            b.show();
+        }
+
+    }
+
+    private class RemoveCheckin extends AsyncTask<String, Void, String> {
+
+        String api = site + "/API/checkin/";
+        Exception mException = null;
+        String userid;
+
+        @Override
+        protected String doInBackground(String... strings) {
+            userid = strings[0];
+            HttpURLConnection urlConnection;
+
+            try {
+                urlConnection = createConnection(api + userid, "DELETE", null);
+                StringBuilder sb = new StringBuilder();
+                int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
+                if (HttpResult == HttpURLConnection.HTTP_OK) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        sb.append(line).append("\n");
+                    }
+                    br.close();
+                    JSONObject response = new JSONObject(sb.toString());
+                    EmitCheckout(response);
+                    return "Succes";
+                }
+                Log.i("FAIL", String.valueOf(urlConnection != null ? urlConnection.getResponseCode() : 0));
+                return "Fail";
+            }
+            catch (Exception e)
+            {
+                Log.i("REMOVE CHECKIN", e.toString());
+                this.mException = e;
+                return "Exception";
+            }
+        }
+
+        @Override
+        protected void onPostExecute(String result) {
+            switch(result) {
+                case "Succes":
+                    Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                    // Vibrate for 500 milliseconds
+                    if (v != null) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            v.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE));
+                        }else{
+                            //deprecated in API 26
+                            v.vibrate(500);
+                        }
+                    }
+                    Toast.makeText(getApplicationContext(), "Succesfully checked out", Toast.LENGTH_SHORT).show();
+                    CloseApplication();
+
+                    break;
+                case "Fail":
+                    Toast.makeText(getApplicationContext(), "Something went wrong", Toast.LENGTH_SHORT).show();
+                    CloseApplication();
+                    //showDialog();
+                    break;
+            }
+        }
+
+    }
+
+    private class SetIsRead extends AsyncTask<JSONObject, Void, String> {
+
+        String api = site + "/API/message/";
+        Exception mException = null;
+
+        @Override
+        protected String doInBackground(JSONObject... user) {
+            HttpURLConnection urlConnection;
+
+            try {
+                urlConnection = createConnection(api, "PUT", user[0]);
+                Log.i("user", user[0].toString());
+                StringBuilder sb = new StringBuilder();
+                int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
+                if (HttpResult == HttpURLConnection.HTTP_OK) {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        sb.append(line).append("\n");
+                    }
+                    br.close();
+                    return "Succes";
+                }
+                Log.i("FAIL", String.valueOf(urlConnection != null ? urlConnection.getResponseCode() : 0));
+                return "Fail";
+            }
+            catch (Exception e)
+            {
+                Log.i("ADD TO LOCATION", e.toString());
+                this.mException = e;
+                return "Exception";
+            }
+        }
+
+    }
+
     private void CloseApplication() {
+        spinner.setVisibility(View.INVISIBLE);
         new Handler().postDelayed(new Runnable() {
             @Override
             public void run() {
@@ -676,5 +890,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void EmitCheckin(JSONObject user) {
         mSocket.emit("checkin", user);
+    }
+
+    private void EmitCheckout(JSONObject user) {
+        mSocket.emit("checkout", user);
     }
 }
