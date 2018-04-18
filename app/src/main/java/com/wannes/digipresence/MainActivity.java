@@ -9,10 +9,11 @@ import android.content.Intent;
 import android.net.Uri;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
-import android.os.AsyncTask;
+
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.support.v4.app.NotificationCompat;
@@ -21,20 +22,29 @@ import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
+
 import android.widget.ArrayAdapter;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ProgressBar;
-import android.widget.Spinner;
 import android.widget.Toast;
+
 
 import com.github.nkzawa.socketio.client.IO;
 import com.github.nkzawa.socketio.client.Socket;
+import com.google.gson.Gson;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
+import com.wannes.digipresence.api.APIClient;
+import com.wannes.digipresence.api.APIInterface;
+import com.wannes.digipresence.models.Campus;
+import com.wannes.digipresence.models.CheckinPost;
+import com.wannes.digipresence.models.Location;
+import com.wannes.digipresence.models.Message;
+import com.wannes.digipresence.models.Segment;
+import com.wannes.digipresence.models.User;
 
 import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -43,16 +53,19 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
-import java.net.HttpURLConnection;
 import java.net.URISyntaxException;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
 
-public class MainActivity extends AppCompatActivity {
+import okhttp3.ResponseBody;
+import retrofit2.Call;
+import retrofit2.Callback;
+import retrofit2.Response;
+
+public class MainActivity extends AppCompatActivity  {
 
     private static final String TAG = "GoogleActivity";
     NfcAdapter mAdapter;
@@ -61,6 +74,9 @@ public class MainActivity extends AppCompatActivity {
     //private static String site = "http://10.0.2.2:5000";
     private static String site = "https://agile-everglades-38755.herokuapp.com";
     private ProgressBar spinner;
+    APIInterface apiInterface;
+    private User user;
+    private List<Campus> campuses = null;
 
     private Socket mSocket;
     {
@@ -75,6 +91,9 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        apiInterface = APIClient.getClient().create(APIInterface.class);
+
         spinner = findViewById(R.id.progressBar1);
         spinner.setVisibility(View.VISIBLE);
         uniqueID = readFile("UUID");
@@ -92,7 +111,6 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         Log.i("ID", uniqueID);
-
         mAdapter = NfcAdapter.getDefaultAdapter(this);
 
         if( mAdapter == null) {
@@ -130,8 +148,8 @@ public class MainActivity extends AppCompatActivity {
                 Log.d("MainActivity", "Scanned");
                 Log.d("MainActivity", intentResult.getContents());
                 stickerid = intentResult.getContents();
-                Log.i("start", "2");
-                new FindUser().execute();}
+                GetUser();
+            }
         }
     }
 
@@ -152,9 +170,8 @@ public class MainActivity extends AppCompatActivity {
                     hexdump.append(x);
                 }
                 stickerid = hexdump.toString();
+                GetUser();
                 getTagInfo(i);
-                Log.i("start", "start");
-                new FindUser().execute();
             }
         }
     }
@@ -226,658 +243,578 @@ public class MainActivity extends AppCompatActivity {
         Log.i("NFC contents", String.valueOf(tag.describeContents()));
     }
 
-    private HttpURLConnection createConnection(String api, String method, String[] params, String[] paramNames) {
-        JSONObject object = new JSONObject();
-
-        try {
-            for(int i = 0; i < params.length; i++) {
-                object.put(paramNames[i], params[i]);
-            }
-            return createConnection(api, method, object);
-        }
-        catch (Exception e)
-        {
-            Log.i(api, e.toString());
-            return null;
-        }
-    }
-
-    private HttpURLConnection createConnection(String api, String method, JSONObject object) {
-        HttpURLConnection urlConnection;
-        URL url;
-
-        try {
-            url = new URL(api);
-            urlConnection = (HttpURLConnection) url.openConnection();
-            urlConnection.setRequestMethod(method);
-
-            urlConnection.setDoInput(true);
-            if(!method.equals("GET") && !method.equals("DELETE")) {
-                urlConnection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-                urlConnection.setDoOutput(true);
-
-                OutputStreamWriter wr = new OutputStreamWriter(urlConnection.getOutputStream());
-                wr.write(object.toString());
-                wr.flush();
-            }
-
-            return urlConnection;
-        }
-        catch (Exception e)
-        {
-            Log.i(api, e.toString());
-            return null;
-        }
-    }
-
-    private class CheckIn extends AsyncTask<String, Void, String> {
-        String api = site + "/API/checkin/";
-        String[] paramNames = new String[]{"userid", "locationid"};
-        Exception mException = null;
-
-        @Override
-        protected String doInBackground(String... strings) {
-            HttpURLConnection urlConnection;
-            stickerid = strings[1];
-
-            try {
-                urlConnection = createConnection(api, "POST", strings, paramNames);
-
-                StringBuilder sb = new StringBuilder();
-                int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
-                Log.i("RESULT: ", String.valueOf(urlConnection != null ? urlConnection.getResponseMessage() : null));
-                if (HttpResult == HttpURLConnection.HTTP_OK) {
-                    BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        sb.append(line).append("\n");
-                    }
-                    br.close();
-                    JSONObject response = new JSONObject(sb.toString());
-                    if(response.has("message") && (response.get("message").equals("New sticker") || response.get("message").equals("Location has no name."))) {
-                        Log.i("CHECKIN: ", response.get("message").toString());
-                        return "EnterName";
-                    }
-                    EmitCheckin(response);
-                    return "Succes";
-                }
-                return "Fail";
-            }
-            catch (Exception e)
-            {
-                Log.i("CHECKIN", e.toString());
-                this.mException = e;
-                return "Exception";
-            }
-        }
-
-        @Override
-        protected void onPostExecute(String result) {
-            switch (result) {
-                case "Succes":
-                    Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-                    // Vibrate for 500 milliseconds
-                    if (v != null) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            v.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE));
-                        }else{
-                            //deprecated in API 26
-                            v.vibrate(500);
+    private void GetUser() {
+        Call<User> getUser = apiInterface.getUserByPhoneid(uniqueID.trim());
+        getUser.enqueue(new Callback<User>() {
+            @Override
+            public void onResponse(Call<User> call, Response<User> response) {
+                user = response.body();
+                // Check if user has a message
+                if(user.getMessages().length > 0) {
+                    for(Message m: user.getMessages()) {
+                        if(!m.isRead()) {
+                            NewMessage(m);
                         }
                     }
-                    Toast.makeText(getApplicationContext(), "Succesfully checked in", Toast.LENGTH_SHORT).show();
-                    CloseApplication();
-                    break;
-                case "EnterName":
-                    //Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("http://agile-everglades-38755.herokuapp.com/checkin/" + locationid));
-                    //startActivity(browserIntent);
-                    //CloseApplication();
-                    new GetLocations().execute();
-                    break;
-                case "Fail":
-                    Toast.makeText(getApplicationContext(), "Something went wrong while checking in", Toast.LENGTH_SHORT).show();
-                    CloseApplication();
-                    break;
-                default:
-                    break;
+                }
+
+                // Look if user is checked in
+                if(user.getCheckin() == null) {
+                    CreateCheckin();
+                }
+                else {
+                    GetLocationById(user.getCheckin().getLocation().getId());
+                }
+            }
+
+            @Override
+            public void onFailure(Call<User> call, Throwable t) {
+                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site + "/account/register/" + uniqueID));
+                startActivity(browserIntent);
+                CloseApplication();
+            }
+        });
+    }
+
+    private void NewMessage(Message message) {
+        NotificationCompat.Builder mBuilder =
+                new NotificationCompat.Builder(getApplicationContext(), "notify_001");
+
+        mBuilder.setSmallIcon(R.drawable.ic_message_black_24dp);
+        mBuilder.setContentTitle(message.getSender().getName() + ": " + message.getSubject());
+        mBuilder.setContentText(message.getContent());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+            mBuilder.setPriority(Notification.PRIORITY_MAX);
+        }
+
+        NotificationManager mNotificationManager =
+                (NotificationManager) getApplicationContext().getSystemService(Context.NOTIFICATION_SERVICE);
+
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel("notify_001",
+                    "DigiPresence Message Notifications",
+                    NotificationManager.IMPORTANCE_DEFAULT);
+            mNotificationManager.createNotificationChannel(channel);
+        }
+
+        if (mNotificationManager != null) {
+            mNotificationManager.notify(0, mBuilder.build());
+        }
+        for(Message m: user.getMessages()) {
+            if(m.getId().equals(message.getId())) {
+                m.setRead(true);
+                UpdateUser(false);
             }
         }
     }
 
-    private class GetLocations extends AsyncTask<String, Void, String> {
-
-        String api = site + "/API/locations/";
-        String[] paramNames = new String[]{};
-        Exception mException = null;
-        JSONArray o;
-
-        @Override
-        protected String doInBackground(String... strings) {
-            HttpURLConnection urlConnection;
-
-            try {
-                urlConnection = createConnection(api, "GET", strings, paramNames);
-
-                StringBuilder sb = new StringBuilder();
-                int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
-                if (HttpResult == HttpURLConnection.HTTP_OK) {
-                    BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        sb.append(line).append("\n");
-                    }
-                    br.close();
-                    o = new JSONArray(sb.toString());
-                    return "Succes";
+    private void UpdateUser(final boolean close) {
+        Call<User> updateUser = apiInterface.updateUser(user);
+        updateUser.enqueue(new Callback<User>() {
+            @Override
+            public void onResponse(Call<User> call, Response<User> response) {
+                if(close) {
+                    CloseApplication();
+                    EmitCheckout(response.body());
                 }
-                Log.i("FAIL", String.valueOf(urlConnection != null ? urlConnection.getResponseCode() : 0));
-                return "Fail";
+
             }
-            catch (Exception e)
-            {
-                Log.i("GET LOCATIONS", e.toString());
-                this.mException = e;
-                return "Exception";
+
+            @Override
+            public void onFailure(Call<User> call, Throwable t) {
+                if(close) {
+                    CloseApplication();
+                }
             }
-        }
+        });
+    }
 
-        @Override
-        protected void onPostExecute(String result) {
-            showDialog();
-        }
+    private void CreateCheckin() {
+        CheckinPost checkin = new CheckinPost(user.getId(), stickerid);
 
-        private void showDialog() {
-            AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(MainActivity.this);
-            LayoutInflater inflater = MainActivity.this.getLayoutInflater();
-            final View dialogView = inflater.inflate(R.layout.new_location_dialog, null);
-            dialogBuilder.setView(dialogView);
-
-            final EditText edt = dialogView.findViewById(R.id.editLocation);
-            final Spinner spin = dialogView.findViewById((R.id.spinnerLocations));
-            final CheckBox doNotDisturbCheck = dialogView.findViewById(R.id.checkDoNotDisturb);
-            String[] items = new String[o.length()+1];
-            items[0] = "";
-            for(int i = 1; i<o.length()+1;i++) {
+        Call<ResponseBody> createCheckin = apiInterface.createCheckin(checkin);
+        createCheckin.enqueue(new Callback<ResponseBody>() {
+            @Override
+            public void onResponse(Call<ResponseBody> call, Response<ResponseBody> response) {
+                String message = null;
                 try {
-                    items[i] = new JSONObject(o.get(i-1).toString()).getString("name");
-                } catch (JSONException e) {
+                    message = response.body().string();
+                } catch (IOException e) {
                     e.printStackTrace();
                 }
-            }
-            ArrayAdapter<String> adapter = new ArrayAdapter<>(getApplicationContext(), android.R.layout.simple_spinner_dropdown_item, items);
-            spin.setAdapter(adapter);
-            dialogBuilder.setTitle("New Sticker Scanned");
-            //dialogBuilder.setMessage("Add to existing location OR Create new location:");
-            dialogBuilder.setPositiveButton("Done", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface dialog, int whichButton) {
-                    String location = edt.getText().toString();
-                    String t = spin.getSelectedItem().toString();
-                    Boolean doNotDisturb = doNotDisturbCheck.isChecked();
-                    ArrayList<String> stickers = new ArrayList<>();
-                    stickers.add(stickerid);
-                    if(!location.equals("")) {
-                        //Create Location
-                        JSONObject object = new JSONObject();
-                        try {
-                            object.put("name", location);
-                            object.put("stickers", new JSONArray(stickers));
-                            object.put("doNotDisturb", doNotDisturb);
-                            new CreateLocation().execute(object);
-                        } catch (JSONException e) {
-                            e.printStackTrace();
-                        }
-                    }
-                    else if(!t.equals("")) {
-                        //Add to existing location
-                        for(int i = 1; i<o.length()+1;i++) {
-                            try {
-                                JSONObject loc = new JSONObject(o.get(i).toString());
-                                if(loc.get("name").equals(t)) {
-                                    if(loc.has("stickers")) {
-                                        loc.put("stickers", loc.getJSONArray("stickers").put(stickerid));
-                                    }
-                                    else {
-                                        loc.put("stickers", new JSONArray(stickers));
-                                    }
-                                    new AddToLocation().execute(loc);
-                                    break;
-                                }
-                            } catch (JSONException e) {
-                                e.printStackTrace();
+
+                switch(message) {
+                    default:
+                        EmitCheckin(response.body());
+                        Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                        // Vibrate for 500 milliseconds
+                        if (v != null) {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                v.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE));
+                            }else{
+                                //deprecated in API 26
+                                v.vibrate(500);
                             }
                         }
+                        Toast.makeText(getApplicationContext(), "Succesfully checked in", Toast.LENGTH_SHORT).show();
+                        CloseApplication();
+                        break;
+                    case "{\"message\":\"New sticker\"}":
+                        GetCampuses();
+                        break;
+                    case "{\"message\":\"Location has no name.\"}":
+                        GetCampuses();
+                        break;
+                }
+            }
+
+            @Override
+            public void onFailure(Call<ResponseBody> call, Throwable t) {
+                Log.i("error", t.getMessage());
+                Toast.makeText(getApplicationContext(), "Something went wrong while checking in", Toast.LENGTH_SHORT).show();
+                CloseApplication();
+            }
+        });
+    }
+
+    private void CreateCampus(final Campus campus) {
+        Call<Campus> createCampus = apiInterface.createCampus(campus);
+        createCampus.enqueue(new Callback<Campus>() {
+            @Override
+            public void onResponse(Call<Campus> call, Response<Campus> response) {
+                campuses.add(response.body());
+                createSegmentDialog(campus);
+            }
+
+            @Override
+            public void onFailure(Call<Campus> call, Throwable t) {
+
+            }
+        });
+    }
+
+    private void UpdateCampus(Campus campus) {
+        Call<Campus> updateCampus = apiInterface.updateCampus(campus);
+        updateCampus.enqueue(new Callback<Campus>() {
+            @Override
+            public void onResponse(Call<Campus> call, Response<Campus> response) {
+                Toast.makeText(getApplicationContext(), "Succesfully updated campus", Toast.LENGTH_LONG).show();
+            }
+
+            @Override
+            public void onFailure(Call<Campus> call, Throwable t) {
+                Toast.makeText(getApplicationContext(), "Something went wrong while updating campus", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void CreateSegment(final Campus campus, final Segment segment) {
+        Call<Segment> createSegment = apiInterface.createSegment(segment);
+        createSegment.enqueue(new Callback<Segment>() {
+            @Override
+            public void onResponse(Call<Segment> call, Response<Segment> response) {
+                campus.addSegment(segment);
+                UpdateCampus(campus);
+                createLocationDialog(segment);
+            }
+
+            @Override
+            public void onFailure(Call<Segment> call, Throwable t) {
+                Toast.makeText(getApplicationContext(), "Something went wrong while creating new segment", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void UpdateSegment(Segment segment) {
+        Call<Segment> updateSegment = apiInterface.updateSegment(segment);
+        updateSegment.enqueue(new Callback<Segment>() {
+            @Override
+            public void onResponse(Call<Segment> call, Response<Segment> response) {
+                Toast.makeText(getApplicationContext(), "Succesfully updated segment", Toast.LENGTH_LONG).show();
+            }
+
+            @Override
+            public void onFailure(Call<Segment> call, Throwable t) {
+                Toast.makeText(getApplicationContext(), "Something went wrong while updating segment", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void CreateLocation(final Segment segment, Location location) {
+        Call<Location> createLocation = apiInterface.createlocation(location);
+        createLocation.enqueue(new Callback<Location>() {
+            @Override
+            public void onResponse(Call<Location> call, Response<Location> response) {
+                Toast.makeText(getApplicationContext(), "Succesfully created new location", Toast.LENGTH_LONG).show();
+                segment.addLocation(response.body());
+                UpdateSegment(segment);
+            }
+
+            @Override
+            public void onFailure(Call<Location> call, Throwable t) {
+                Toast.makeText(getApplicationContext(), "Something went wrong while creating new location", Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    private void UpdateLocation(Location location) {
+        Call<Location> updateLocation = apiInterface.updateLocation(location);
+        updateLocation.enqueue(new Callback<Location>() {
+            @Override
+            public void onResponse(Call<Location> call, Response<Location> response) {
+                Toast.makeText(getApplicationContext(), "Succesfully added sticker to location", Toast.LENGTH_LONG).show();
+                CloseApplication();
+            }
+
+            @Override
+            public void onFailure(Call<Location> call, Throwable t) {
+                Toast.makeText(getApplicationContext(), "Something went wrong while add sticker to location", Toast.LENGTH_LONG).show();
+                CloseApplication();
+            }
+        });
+    }
+
+    private void GetCampuses() {
+        Call<List<Campus>> getCampuses = apiInterface.doGetCampuses();
+        getCampuses.enqueue(new Callback<List<Campus>>() {
+            @Override
+            public void onResponse(Call<List<Campus>> call, Response<List<Campus>> response) {
+                campuses = response.body();
+                newStickerDialog();
+            }
+
+            @Override
+            public void onFailure(Call<List<Campus>> call, Throwable t) {
+                CloseApplication();
+            }
+        });
+    }
+
+    private void GetLocationById(String id) {
+        Call<Location> getLocationById = apiInterface.getLocationById(id);
+        getLocationById.enqueue(new Callback<Location>() {
+            @Override
+            public void onResponse(Call<Location> call, Response<Location> response) {
+                Location location = response.body();
+                if(location.getStickers().indexOf(stickerid) == -1) {
+                    //not same location
+                    CreateCheckin();
+                }
+                else {
+                    //same location
+                    showRemoveCheckinDialog();
+                }
+            }
+
+            @Override
+            public void onFailure(Call<Location> call, Throwable t) {
+                CloseApplication();
+            }
+        });
+    }
+
+    private void showRemoveCheckinDialog() {
+        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(MainActivity.this);
+        LayoutInflater inflater = getLayoutInflater();
+        final View dialogView = inflater.inflate(R.layout.show_phoneid_dialog, null);
+        dialogBuilder.setView(dialogView);
+
+        dialogBuilder.setTitle("Checkin");
+        dialogBuilder.setMessage("Checked in to the same location twice.");
+        dialogBuilder.setPositiveButton("Checkout", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int whichButton) {
+                user.setCheckin(null);
+                UpdateUser(true);
+            }
+        });
+        dialogBuilder.setNegativeButton("Checkin again", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int whichButton) {
+                //pass
+                CreateCheckin();
+            }
+        });
+        AlertDialog b = dialogBuilder.create();
+        b.show();
+    }
+
+    private void newStickerDialog() {
+        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+        dialogBuilder.setTitle("New sticker scanned:\nSelect campus");
+
+        final ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, android.R.layout.select_dialog_singlechoice);
+        for(Campus campus: campuses) {
+            if(campus.isThuiswerk()) {
+                arrayAdapter.insert(campus.getName(), 0);
+            }
+            else if (campus.isLunch()) {
+                arrayAdapter.insert(campus.getName(), arrayAdapter.getCount());
+            }
+            else {
+                if(arrayAdapter.getCount() > 0)
+                    arrayAdapter.insert(campus.getName(), arrayAdapter.getCount()-1);
+                else
+                    arrayAdapter.add(campus.getName());
+            }
+        }
+        arrayAdapter.add("Andere?");
+        dialogBuilder.setNegativeButton("cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                CloseApplication();
+                dialog.dismiss();
+            }
+        });
+
+        dialogBuilder.setAdapter(arrayAdapter, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                String campus = arrayAdapter.getItem(which);
+                if((campus != null && campus.equals("Andere?")) && arrayAdapter.getCount() == which + 1) {
+                    createCampusDialog();
+                }
+                else {
+                    selectSegmentDialog(campus);
+                }
+            }
+        });
+        dialogBuilder.show();
+    }
+
+    private void createCampusDialog() {
+        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+        LayoutInflater inflater = getLayoutInflater();
+        final View dialogView = inflater.inflate(R.layout.create_campus_dialog, null);
+        dialogBuilder.setView(dialogView);
+        dialogBuilder.setTitle("Create campus");
+
+        final EditText edt = dialogView.findViewById(R.id.editCampus);
+        final CheckBox isLunchCheck = dialogView.findViewById(R.id.checkIsLunch);
+        final CheckBox isThuiswerkCheck = dialogView.findViewById(R.id.checkIsThuiswerk);
+
+        dialogBuilder.setPositiveButton("Create", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                String name = edt.getText().toString();
+                boolean isLunch = isLunchCheck.isChecked();
+                boolean isThuiswerk = isThuiswerkCheck.isChecked();
+                if (!name.trim().isEmpty()) {
+                    Campus campus = new Campus("", name, isLunch, isThuiswerk, null);
+                    CreateCampus(campus);
+                } else {
+                    createCampusDialog();
+                }
+            }
+        });
+
+        dialogBuilder.setNegativeButton("Back", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                newStickerDialog();
+            }
+        });
+
+        dialogBuilder.show();
+    }
+
+    private void selectSegmentDialog(final String campusName) {
+        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+        dialogBuilder.setTitle("New sticker scanned:\nSelect segment");
+
+        final ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, android.R.layout.select_dialog_singlechoice);
+        for(Campus campus: campuses) {
+            if(campus.getName().equals(campusName)) {
+                for(Segment segment: campus.getSegments()) {
+                    if(segment.isVergadering()) {
+                        arrayAdapter.insert(segment.getName(), 0);
                     }
                     else {
-                        //User doesn't want to select anything
-                        CloseApplication();
+                        arrayAdapter.add(segment.getName());
                     }
                 }
-            });
-            dialogBuilder.setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface dialog, int whichButton) {
-                    //pass
-                    CloseApplication();
-                }
-            });
-            AlertDialog b = dialogBuilder.create();
-            b.show();
+            }
         }
+        arrayAdapter.add("Andere?");
+        dialogBuilder.setNegativeButton("cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                CloseApplication();
+                dialog.dismiss();
+            }
+        });
+
+        dialogBuilder.setPositiveButton("back", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                newStickerDialog();
+            }
+        });
+
+        dialogBuilder.setAdapter(arrayAdapter, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                String segment = arrayAdapter.getItem(which);
+                if((segment != null && segment.equals("Andere?")) && arrayAdapter.getCount() == which + 1) {
+                    for(Campus campus: campuses) {
+                        if(campus.getName().equals(campusName)) {
+                            createSegmentDialog(campus);
+                        }
+                    }
+                }
+                else {
+                    selectLocationDialog(campusName, segment);
+                }
+
+            }
+        });
+        dialogBuilder.show();
     }
 
-    private class CreateLocation extends AsyncTask<JSONObject, Void, String> {
+    private  void createSegmentDialog(final Campus campus) {
+        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+        LayoutInflater inflater = getLayoutInflater();
+        final View dialogView = inflater.inflate(R.layout.create_segment_dialog, null);
+        dialogBuilder.setView(dialogView);
+        dialogBuilder.setTitle("Create segment");
 
-        String api = site + "/API/location/";
-        Exception mException = null;
+        final EditText edt = dialogView.findViewById(R.id.editSegment);
+        final CheckBox isVergaderingCheck = dialogView.findViewById(R.id.checkIsVergadering);
 
-        @Override
-        protected String doInBackground(JSONObject... location) {
-            HttpURLConnection urlConnection;
-
-            try {
-                urlConnection = createConnection(api, "POST", location[0]);
-
-                StringBuilder sb = new StringBuilder();
-                int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
-                if (HttpResult == HttpURLConnection.HTTP_OK) {
-                    BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        sb.append(line).append("\n");
-                    }
-                    br.close();
-                    return "Succes";
+        dialogBuilder.setPositiveButton("Create", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                String name = edt.getText().toString();
+                boolean isVergadering = isVergaderingCheck.isChecked();
+                if (!name.trim().isEmpty()) {
+                    Segment segment = new Segment(null, name, isVergadering, null);
+                    CreateSegment(campus, segment);
+                } else {
+                    createSegmentDialog(campus);
                 }
-                Log.i("FAIL", String.valueOf(urlConnection != null ? urlConnection.getResponseCode() : 0));
-                return "Fail";
             }
-            catch (Exception e)
-            {
-                Log.i("CREATE LOCATION", e.toString());
-                this.mException = e;
-                return "Exception";
-            }
-        }
+        });
 
-        @Override
-        protected void onPostExecute(String result) {
-            switch(result) {
-                case "Succes":
-                    Toast.makeText(getApplicationContext(), "Succesfully created new location", Toast.LENGTH_LONG).show();
-                    break;
-                case "Fail":
-                    Toast.makeText(getApplicationContext(), "Something went wrong while creating new location", Toast.LENGTH_LONG).show();
-                    break;
+        dialogBuilder.setNegativeButton("Back", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                newStickerDialog();
             }
-            CloseApplication();
-        }
+        });
+
+        dialogBuilder.show();
     }
 
-    private class AddToLocation extends AsyncTask<JSONObject, Void, String> {
-
-        String api = site + "/API/location/";
-        Exception mException = null;
-
-        @Override
-        protected String doInBackground(JSONObject... location) {
-            HttpURLConnection urlConnection;
-
-            try {
-                urlConnection = createConnection(api, "PUT", location[0]);
-
-                StringBuilder sb = new StringBuilder();
-                int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
-                if (HttpResult == HttpURLConnection.HTTP_OK) {
-                    BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        sb.append(line).append("\n");
-                    }
-                    br.close();
-                    return "Succes";
-                }
-                Log.i("FAIL", String.valueOf(urlConnection != null ? urlConnection.getResponseCode() : 0));
-                return "Fail";
-            }
-            catch (Exception e)
-            {
-                Log.i("ADD TO LOCATION", e.toString());
-                this.mException = e;
-                return "Exception";
-            }
-        }
-
-        @Override
-        protected void onPostExecute(String result) {
-            switch(result) {
-                case "Succes":
-                    Toast.makeText(getApplicationContext(), "Succesfully added sticker to location", Toast.LENGTH_LONG).show();
-                    break;
-                case "Fail":
-                    Toast.makeText(getApplicationContext(), "Something went wrong while add sticker to location", Toast.LENGTH_LONG).show();
-                    break;
-            }
-            CloseApplication();
-        }
-    }
-
-    private class FindUser extends AsyncTask<String, Void, String> {
-
-        String api = site + "/API/user/phoneid/" + uniqueID;
-        Exception mException = null;
-        StringBuilder sb = new StringBuilder();
-
-        @Override
-        protected String doInBackground(String... strings) {
-            HttpURLConnection urlConnection;
-            Log.i("FINDUSER", "start");
-            try {
-                urlConnection = createConnection(api, "GET", null);
-
-                int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
-                if (HttpResult == HttpURLConnection.HTTP_OK) {
-                    BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        sb.append(line).append("\n");
-                    }
-                    br.close();
-                    if(!sb.toString().equals("[]")) {
-                        Log.i("SUCCES", sb.toString());
-                        return "Succes";
+    private void selectLocationDialog(final String campusName, final String segmentName) {
+        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+        dialogBuilder.setTitle("New sticker scanned:\nSelect location");
+        final ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, android.R.layout.select_dialog_singlechoice);
+        for(Campus campus: campuses) {
+            if(campus.getName().equals(campusName)) {
+                for(Segment segment: campus.getSegments()) {
+                    if(segment.getName().equals(segmentName)) {
+                        for(Location location: segment.getLocations()) {
+                            arrayAdapter.add(location.getName());
+                        }
                     }
                 }
-                Log.i("FAIL", "failed");
-                return "Fail";
-            }
-            catch (Exception e)
-            {
-                Log.i("FIND USER", e.toString());
-                this.mException = e;
-                return "Exception";
             }
         }
+        arrayAdapter.add("Andere?");
+        dialogBuilder.setNegativeButton("cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                CloseApplication();
+                dialog.dismiss();
+            }
+        });
 
-        @Override
-        protected void onPostExecute(String result) {
-            switch(result) {
-                case "Succes":
-                    try {
-                        JSONArray jsonArray = new JSONArray(sb.toString());
-                        if(jsonArray.length() > 0) {
-                            JSONObject o = jsonArray.getJSONObject(0);
-                            if(!o.get("messages").toString().equals("[]")) {
-                                JSONArray messages = o.getJSONArray("messages");
-                                for(int i = 0; i < messages.length(); i++) {
-                                    JSONObject message = messages.getJSONObject(i);
-                                    Log.i("message", message.toString());
-                                    Log.i("isRead", String.valueOf(message.getBoolean("isRead")));
-                                    if(!message.getBoolean("isRead")) {
-                                        //show push notification
-                                        JSONObject sender = message.getJSONObject("sender");
-                                        Log.i("message", sender.toString());
-                                        NotificationCompat.Builder mBuilder =
-                                                new NotificationCompat.Builder(getApplicationContext(), "notify_001");
+        dialogBuilder.setPositiveButton("back", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                selectSegmentDialog(campusName);
+            }
+        });
 
-                                        mBuilder.setSmallIcon(R.drawable.ic_message_black_24dp);
-                                        mBuilder.setContentTitle(sender.getString("name") + ": " + message.getString("subject"));
-                                        mBuilder.setContentText(message.getString("content"));
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-                                            mBuilder.setPriority(Notification.PRIORITY_MAX);
+        dialogBuilder.setAdapter(arrayAdapter, new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                ArrayList<String> stickers = new ArrayList<>();
+                stickers.add(stickerid);
+                String locationName = arrayAdapter.getItem(which);
+
+                if((locationName != null && locationName.equals("Andere?")) && arrayAdapter.getCount() == which + 1) {
+                    for(Campus campus: campuses) {
+                        if(campus.getName().equals(campusName)) {
+                            for(Segment segment: campus.getSegments()) {
+                                if(segment.getName().equals(segmentName)) {
+                                    createLocationDialog(segment);
+                                }
+                            }
+                        }
+                    }
+                }
+                else {
+                    for(Campus campus: campuses) {
+                        if (campus.getName().equals(campusName)) {
+                            for (Segment segment : campus.getSegments()) {
+                                if (segment.getName().equals(segmentName)) {
+                                    for(Location location: segment.getLocations()) {
+                                        if(location.getName().equals(locationName)) {
+                                            if(location.getStickers() != null && location.getStickers().size() > 0) {
+                                                location.addSticker(stickerid);
+                                            }
+                                            else {
+                                                location.setStickers(stickers);
+                                            }
+                                            UpdateLocation(location);
+                                            break;
                                         }
-
-                                        NotificationManager mNotificationManager =
-                                                (NotificationManager) getApplicationContext().getSystemService(Context.NOTIFICATION_SERVICE);
-
-
-                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                            NotificationChannel channel = new NotificationChannel("notify_001",
-                                                    "DigiPresence Message Notifications",
-                                                    NotificationManager.IMPORTANCE_DEFAULT);
-                                            mNotificationManager.createNotificationChannel(channel);
-                                        }
-
-                                        if (mNotificationManager != null) {
-                                            mNotificationManager.notify(0, mBuilder.build());
-                                        }
-                                        message.put("isRead", true);
-                                        new SetIsRead().execute(message);
                                     }
                                 }
                             }
-                            if(o.isNull("checkin")) {
-                                new CheckIn().execute(o.getString("_id"), stickerid);
-                            }
-                            else {
-                                new GetLocation().execute(o.getJSONObject("checkin").getString("location"), o.getString("_id"));
-                            }
                         }
-                        else {
-                            Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site + "/account/register/" + uniqueID));
-                            startActivity(browserIntent);
-                            CloseApplication();
-                        }
-
-                    } catch (JSONException e) {
-                        e.printStackTrace();
                     }
-
-                    break;
-                case "Fail":
-                    //Open browser to add phoneid to account
-                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site + "/account/register/" + uniqueID));
-                    startActivity(browserIntent);
-                    CloseApplication();
-                    //showDialog();
-                    break;
+                }
             }
-        }
-
+        });
+        dialogBuilder.show();
     }
 
-    private class GetLocation extends AsyncTask<String, Void, String> {
+    private void createLocationDialog(final Segment segment) {
+        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
+        LayoutInflater inflater = getLayoutInflater();
+        final View dialogView = inflater.inflate(R.layout.create_location_dialog, null);
+        dialogBuilder.setView(dialogView);
+        dialogBuilder.setTitle("Create location");
 
-        String api = site + "/API/location/";
-        Exception mException = null;
-        StringBuilder sb = new StringBuilder();
-        String userid;
-        String locationid;
+        final EditText edt = dialogView.findViewById(R.id.editLocation);
+        final CheckBox isDoNotDisturbCheck = dialogView.findViewById(R.id.checkDoNotDisturb);
 
-        @Override
-        protected String doInBackground(String... strings) {
-            locationid = strings[0];
-            userid = strings[1];
-            HttpURLConnection urlConnection;
-            Log.i("GETLOCATION", "start");
-            try {
-                urlConnection = createConnection(api + locationid, "GET", null);
-
-                int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
-                if (HttpResult == HttpURLConnection.HTTP_OK) {
-                    BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        sb.append(line).append("\n");
-                    }
-                    br.close();
-                    if(!sb.toString().equals("[]")) {
-                        Log.i("SUCCES", sb.toString());
-                        return "Succes";
-                    }
+        dialogBuilder.setPositiveButton("Create", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                String name = edt.getText().toString();
+                boolean isDoNotDisturb = isDoNotDisturbCheck.isChecked();
+                if (!name.trim().isEmpty()) {
+                    Location location = new Location("", name, null, isDoNotDisturb);
+                    CreateLocation(segment, location);
+                } else {
+                    createLocationDialog(segment);
                 }
-                Log.i("FAIL", "failed");
-                return "Fail";
             }
-            catch (Exception e)
-            {
-                Log.i("FIND USER", e.toString());
-                this.mException = e;
-                return "Exception";
+        });
+
+        dialogBuilder.setNegativeButton("Close", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                CloseApplication();
             }
-        }
+        });
 
-        @Override
-        protected void onPostExecute(String result) {
-            switch(result) {
-                case "Succes":
-                    try {
-                        JSONObject location = new JSONObject(sb.toString());
-                        JSONArray stickers = location.getJSONArray("stickers");
-                        boolean sameLocation = false;
-                        for(int i = 0; i < stickers.length(); i++) {
-                            if(stickers.get(i).equals(stickerid)) {
-                                //Checkin in same location
-                                sameLocation = true;
-                            }
-                        }
-                        if(sameLocation) {
-                            showRemoveCheckinDialog();
-                        }
-                        else {
-                            new CheckIn().execute(userid, stickerid);
-                        }
-
-                    } catch (JSONException e) {
-                        e.printStackTrace();
-                    }
-
-                    break;
-                case "Fail":
-                    //Open browser to add phoneid to account
-                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site + "/account/register/" + uniqueID));
-                    startActivity(browserIntent);
-                    CloseApplication();
-                    //showDialog();
-                    break;
-            }
-        }
-
-        private void showRemoveCheckinDialog() {
-            AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(MainActivity.this);
-            LayoutInflater inflater = MainActivity.this.getLayoutInflater();
-            final View dialogView = inflater.inflate(R.layout.show_phoneid_dialog, null);
-            dialogBuilder.setView(dialogView);
-
-            dialogBuilder.setTitle("Checkin");
-            dialogBuilder.setMessage("Checked in to the same location twice.");
-            dialogBuilder.setPositiveButton("Checkout", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface dialog, int whichButton) {
-                    new RemoveCheckin().execute(userid);
-                }
-            });
-            dialogBuilder.setNegativeButton("Checkin again", new DialogInterface.OnClickListener() {
-                public void onClick(DialogInterface dialog, int whichButton) {
-                    //pass
-                    new CheckIn().execute(userid, stickerid);
-                }
-            });
-            AlertDialog b = dialogBuilder.create();
-            b.show();
-        }
-
+        dialogBuilder.show();
     }
 
-    private class RemoveCheckin extends AsyncTask<String, Void, String> {
-
-        String api = site + "/API/checkin/";
-        Exception mException = null;
-        String userid;
-
-        @Override
-        protected String doInBackground(String... strings) {
-            userid = strings[0];
-            HttpURLConnection urlConnection;
-
-            try {
-                urlConnection = createConnection(api + userid, "DELETE", null);
-                StringBuilder sb = new StringBuilder();
-                int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
-                if (HttpResult == HttpURLConnection.HTTP_OK) {
-                    BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        sb.append(line).append("\n");
-                    }
-                    br.close();
-                    JSONObject response = new JSONObject(sb.toString());
-                    EmitCheckout(response);
-                    return "Succes";
-                }
-                Log.i("FAIL", String.valueOf(urlConnection != null ? urlConnection.getResponseCode() : 0));
-                return "Fail";
-            }
-            catch (Exception e)
-            {
-                Log.i("REMOVE CHECKIN", e.toString());
-                this.mException = e;
-                return "Exception";
-            }
-        }
-
-        @Override
-        protected void onPostExecute(String result) {
-            switch(result) {
-                case "Succes":
-                    Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-                    // Vibrate for 500 milliseconds
-                    if (v != null) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            v.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE));
-                        }else{
-                            //deprecated in API 26
-                            v.vibrate(500);
-                        }
-                    }
-                    Toast.makeText(getApplicationContext(), "Succesfully checked out", Toast.LENGTH_SHORT).show();
-                    CloseApplication();
-
-                    break;
-                case "Fail":
-                    Toast.makeText(getApplicationContext(), "Something went wrong", Toast.LENGTH_SHORT).show();
-                    CloseApplication();
-                    //showDialog();
-                    break;
-            }
-        }
-
-    }
-
-    private class SetIsRead extends AsyncTask<JSONObject, Void, String> {
-
-        String api = site + "/API/message/";
-        Exception mException = null;
-
-        @Override
-        protected String doInBackground(JSONObject... user) {
-            HttpURLConnection urlConnection;
-
-            try {
-                urlConnection = createConnection(api, "PUT", user[0]);
-                Log.i("user", user[0].toString());
-                StringBuilder sb = new StringBuilder();
-                int HttpResult = urlConnection != null ? urlConnection.getResponseCode() : 0;
-                if (HttpResult == HttpURLConnection.HTTP_OK) {
-                    BufferedReader br = new BufferedReader(new InputStreamReader(urlConnection.getInputStream(), "utf-8"));
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        sb.append(line).append("\n");
-                    }
-                    br.close();
-                    return "Succes";
-                }
-                Log.i("FAIL", String.valueOf(urlConnection != null ? urlConnection.getResponseCode() : 0));
-                return "Fail";
-            }
-            catch (Exception e)
-            {
-                Log.i("ADD TO LOCATION", e.toString());
-                this.mException = e;
-                return "Exception";
-            }
-        }
-
-    }
-
-    private void CloseApplication() {
+    public void CloseApplication() {
         spinner.setVisibility(View.INVISIBLE);
         new Handler().postDelayed(new Runnable() {
             @Override
@@ -892,11 +829,12 @@ public class MainActivity extends AppCompatActivity {
 
     }
 
-    private void EmitCheckin(JSONObject user) {
+    private void EmitCheckin(ResponseBody user) {
         mSocket.emit("checkin", user);
     }
 
-    private void EmitCheckout(JSONObject user) {
-        mSocket.emit("checkout", user);
+    private void EmitCheckout(User user) {
+        Gson gson = new Gson();
+        mSocket.emit("checkout", gson.toJson(user));
     }
 }
