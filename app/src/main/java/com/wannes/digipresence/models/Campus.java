@@ -2,6 +2,7 @@ package com.wannes.digipresence.models;
 
 import com.google.gson.annotations.SerializedName;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class Campus {
@@ -68,6 +69,9 @@ public class Campus {
     }
 
     public void addSegment(Segment segment) {
+        if(this.segments == null) {
+            this.segments = new ArrayList<>();
+        }
         this.segments.add(segment);
     }
 }

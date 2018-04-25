@@ -1,6 +1,12 @@
 <resources>
-    <string name="app_name">DigiPresence</string>
+    <string name="app_name">Wie is waar?</string>
     <string name="do_not_disturb_location">Do not disturb location</string>
     <string name="create_new_location">Create new location</string>
     <string name="add_to_existing_location">Add to existing location</string>
+    <string name="segment_name">Segment name</string>
+    <string name="vergadering">Vergadering</string>
+    <string name="location_name">Location name</string>
+    <string name="campus_name">Campus name</string>
+    <string name="thuiswerk">Thuiswerk</string>
+    <string name="lunch">Lunch</string>
 </resources>

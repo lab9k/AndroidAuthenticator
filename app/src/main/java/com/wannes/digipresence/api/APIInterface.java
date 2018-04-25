@@ -13,6 +13,7 @@ import java.util.List;
 import okhttp3.ResponseBody;
 import retrofit2.Call;
 import retrofit2.http.Body;
+import retrofit2.http.DELETE;
 import retrofit2.http.FormUrlEncoded;
 import retrofit2.http.GET;
 import retrofit2.http.POST;
@@ -55,4 +56,7 @@ public interface APIInterface {
 
     @GET("/API/location/{id}")
     Call<Location> getLocationById(@Path("id") String id);
+
+    @DELETE("/API/checkin/{id}")
+    Call<ResponseBody> deleteCheckin(@Path("id") String id);
 }

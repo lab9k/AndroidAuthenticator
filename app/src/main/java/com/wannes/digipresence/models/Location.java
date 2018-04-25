@@ -2,6 +2,7 @@ package com.wannes.digipresence.models;
 
 import com.google.gson.annotations.SerializedName;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class Location {
@@ -57,6 +58,9 @@ public class Location {
     }
 
     public void addSticker(String stickerid) {
+        if(this.stickers == null) {
+            this.stickers = new ArrayList<>();
+        }
         this.stickers.add(stickerid);
     }
 }

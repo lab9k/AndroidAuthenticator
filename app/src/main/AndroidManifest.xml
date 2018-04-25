@@ -17,6 +17,7 @@
         android:theme="@style/AppTheme" >
         <activity
             android:name=".MainActivity"
+            android:launchMode="singleTask"
             android:theme="@style/Theme.AppCompat.Translucent"
             android:label="@string/app_name">
             <intent-filter>

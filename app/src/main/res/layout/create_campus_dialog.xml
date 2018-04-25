@@ -11,18 +11,18 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:inputType="text"
-        android:hint="Campus name"/>
+        android:hint="@string/campus_name"/>
 
     <CheckBox
         android:id="@+id/checkIsThuiswerk"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Thuiswerk" />
+        android:text="@string/thuiswerk" />
 
     <CheckBox
         android:id="@+id/checkIsLunch"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Lunch" />
+        android:text="@string/lunch" />
 
 </LinearLayout>
