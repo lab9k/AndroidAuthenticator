@@ -67,13 +67,12 @@ import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity  {
 
-    private static final String TAG = "GoogleActivity";
-    NfcAdapter mAdapter;
+    private NfcAdapter mAdapter;
     private String stickerId = "";
     private static String uniqueID;
     private static String site = "https://agile-everglades-38755.herokuapp.com";
     private ProgressBar spinner;
-    APIInterface apiInterface;
+    private APIInterface apiInterface;
     private User user;
     private List<Campus> campuses = null;
 
@@ -82,7 +81,7 @@ public class MainActivity extends AppCompatActivity  {
         try {
             mSocket = IO.socket(site);
         } catch (URISyntaxException e) {
-            Log.i(TAG, e.toString());
+            Log.i("Socket", e.toString());
         }
     }
 
@@ -108,6 +107,7 @@ public class MainActivity extends AppCompatActivity  {
             } catch (Exception e) {
                 e.printStackTrace();
             }
+            uniqueID = readFile();
         }
         Log.i("ID", uniqueID);
         mAdapter = NfcAdapter.getDefaultAdapter(this);
@@ -146,7 +146,7 @@ public class MainActivity extends AppCompatActivity  {
             else {
                 Log.d("MainActivity", "Scanned");
                 Log.d("MainActivity", intentResult.getContents());
-                stickerId = intentResult.getContents();
+                stickerId = intentResult.getContents().replaceAll(".*\\/", "");
                 GetUser();
             }
         }
@@ -192,6 +192,13 @@ public class MainActivity extends AppCompatActivity  {
         dialogBuilder.setPositiveButton("Use QR", new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int whichButton) {
                 scanQR();
+            }
+        });
+        dialogBuilder.setNeutralButton("Open site", new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int whichButton) {
+                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site));
+                startActivity(browserIntent);
+                CloseApplication("OPEN SITE");
             }
         });
         dialogBuilder.setNegativeButton("Close", new DialogInterface.OnClickListener() {
@@ -332,29 +339,6 @@ public class MainActivity extends AppCompatActivity  {
             }
         });
     }
-
-    /*
-    private void UpdateUser(final boolean close) {
-        Call<User> updateUser = apiInterface.updateUser(user);
-        Log.i("API", "UPDATE USER");
-        updateUser.enqueue(new Callback<User>() {
-            @Override
-            public void onResponse(Call<User> call, Response<User> response) {
-                if(close) {
-                    CloseApplication("UPDATE USER CLOSE");
-                    //EmitCheckout(response.body());
-                }
-
-            }
-
-            @Override
-            public void onFailure(Call<User> call, Throwable t) {
-                if(close) {
-                    CloseApplication("UPDATE USER");
-                }
-            }
-        });
-    }*/
 
     private void DeleteCheckin() {
         user.setCheckin(null);
@@ -503,7 +487,7 @@ public class MainActivity extends AppCompatActivity  {
     }
 
     private void CreateLocation(final Segment segment, Location location) {
-        Call<Location> createLocation = apiInterface.createlocation(location);
+        Call<Location> createLocation = apiInterface.createLocation(location);
         Log.i("API", "CREATE LOCATION");
         createLocation.enqueue(new Callback<Location>() {
             @Override

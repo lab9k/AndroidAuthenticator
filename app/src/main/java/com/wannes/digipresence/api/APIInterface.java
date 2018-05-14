@@ -1,7 +1,6 @@
 package com.wannes.digipresence.api;
 
 import com.wannes.digipresence.models.Campus;
-import com.wannes.digipresence.models.Checkin;
 import com.wannes.digipresence.models.CheckinPost;
 import com.wannes.digipresence.models.Location;
 import com.wannes.digipresence.models.Message;
@@ -14,7 +13,6 @@ import okhttp3.ResponseBody;
 import retrofit2.Call;
 import retrofit2.http.Body;
 import retrofit2.http.DELETE;
-import retrofit2.http.FormUrlEncoded;
 import retrofit2.http.GET;
 import retrofit2.http.POST;
 import retrofit2.http.PUT;
@@ -31,7 +29,7 @@ public interface APIInterface {
     Call<Segment> createSegment(@Body Segment segment);
 
     @POST("/API/location")
-    Call<Location> createlocation(@Body Location location);
+    Call<Location> createLocation(@Body Location location);
 
     @POST("/API/checkin")
     Call<ResponseBody> createCheckin(@Body CheckinPost checkin);
@@ -44,9 +42,6 @@ public interface APIInterface {
 
     @PUT("/API/location")
     Call<Location> updateLocation(@Body Location location);
-
-    @PUT("/API/user")
-    Call<User> updateUser(@Body User user);
 
     @PUT("/API/message")
     Call<Message> updateMessage(@Body Message message);
