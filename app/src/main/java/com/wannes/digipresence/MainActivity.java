@@ -67,10 +67,9 @@ import retrofit2.Response;
 
 public class MainActivity extends AppCompatActivity  {
 
-    private NfcAdapter mAdapter;
     private String stickerId = "";
     private static String uniqueID;
-    private static String site = "https://agile-everglades-38755.herokuapp.com";
+    private static String site = "https://wiw.lab9k.gent";
     private ProgressBar spinner;
     private APIInterface apiInterface;
     private User user;
@@ -110,15 +109,17 @@ public class MainActivity extends AppCompatActivity  {
             uniqueID = readFile();
         }
         Log.i("ID", uniqueID);
-        mAdapter = NfcAdapter.getDefaultAdapter(this);
+        NfcAdapter mAdapter = NfcAdapter.getDefaultAdapter(this);
 
         if( mAdapter == null) {
             //nfc not supported on device
+            Toast.makeText(getApplicationContext(), R.string.nfc_not_supported_message, Toast.LENGTH_LONG).show();
             scanQR();
         }
 
         if(mAdapter != null && !mAdapter.isEnabled()) {
             Log.i("NFC", "NFC is disabled");
+            Toast.makeText(getApplicationContext(), R.string.nfc_disabled_message, Toast.LENGTH_LONG).show();
             scanQR();
         }
         else {
@@ -147,7 +148,7 @@ public class MainActivity extends AppCompatActivity  {
                 Log.d("MainActivity", "Scanned");
                 Log.d("MainActivity", intentResult.getContents());
                 stickerId = intentResult.getContents().replaceAll(".*\\/", "");
-                GetUser();
+                GetUser(false);
             }
         }
     }
@@ -169,7 +170,7 @@ public class MainActivity extends AppCompatActivity  {
                     hexDump.append(x);
                 }
                 stickerId = hexDump.toString();
-                GetUser();
+                GetUser(false);
                 getTagInfo(i);
             }
         }
@@ -187,24 +188,33 @@ public class MainActivity extends AppCompatActivity  {
         @SuppressLint("InflateParams") final View dialogView = inflater.inflate(R.layout.show_phoneid_dialog, null);
         dialogBuilder.setView(dialogView);
 
-        dialogBuilder.setTitle("App opened");
-        dialogBuilder.setMessage("Scan a nfc tag to checkin OR checkin in with QR.:");
-        dialogBuilder.setPositiveButton("Use QR", new DialogInterface.OnClickListener() {
+        dialogBuilder.setTitle(R.string.app_opened);
+        dialogBuilder.setMessage(R.string.app_opened_message);
+        dialogBuilder.setPositiveButton(R.string.app_opened_positive_button, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int whichButton) {
                 scanQR();
             }
         });
-        dialogBuilder.setNeutralButton("Open site", new DialogInterface.OnClickListener() {
+        dialogBuilder.setNegativeButton(R.string.app_opened_neutral_button, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int whichButton) {
-                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site));
-                startActivity(browserIntent);
-                CloseApplication("OPEN SITE");
+                //Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site));
+                //startActivity(browserIntent);
+                //CloseApplication("CHECKOUT");
+                GetUser(true);
             }
         });
-        dialogBuilder.setNegativeButton("Close", new DialogInterface.OnClickListener() {
+        dialogBuilder.setNeutralButton(R.string.cancel, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int whichButton) {
                 //pass
                 CloseApplication("APP CLOSED");
+            }
+        });
+        dialogBuilder.setOnCancelListener(new DialogInterface.OnCancelListener()
+        {
+            @Override
+            public void onCancel(DialogInterface dialog)
+            {
+                CloseApplication("Dialog closed");
             }
         });
         AlertDialog b = dialogBuilder.create();
@@ -215,7 +225,7 @@ public class MainActivity extends AppCompatActivity  {
         Log.i("open", "scan qr");
         IntentIntegrator integrator = new IntentIntegrator(MainActivity.this);
         integrator.setDesiredBarcodeFormats(IntentIntegrator.QR_CODE_TYPES);
-        integrator.setPrompt("Scan Code");
+        integrator.setPrompt(getString(R.string.scan_code));
         integrator.setCameraId(0);
         integrator.setBeepEnabled(true);
         integrator.setBarcodeImageEnabled(false);
@@ -249,7 +259,7 @@ public class MainActivity extends AppCompatActivity  {
         Log.i("NFC contents", String.valueOf(tag.describeContents()));
     }
 
-    private void GetUser() {
+    private void GetUser(final boolean checkout) {
         Call<User> getUser = apiInterface.getUserByPhoneid(uniqueID.trim());
         Log.i("API", "GET USER");
         getUser.enqueue(new Callback<User>() {
@@ -271,12 +281,16 @@ public class MainActivity extends AppCompatActivity  {
                         }
                     }
 
-                    // Look if user is checked in
-                    if(user.getCheckin() == null) {
-                        CreateCheckin();
-                    }
-                    else {
-                        GetLocationById(user.getCheckin().getLocation().getId());
+                    if(!checkout) {
+                        // Look if user is checked in
+                        if(user.getCheckin() == null) {
+                            CreateCheckin();
+                        }
+                        else {
+                            GetLocationById(user.getCheckin().getLocation().getId());
+                        }
+                    } else {
+                        DeleteCheckin();
                     }
                 }
             }
@@ -305,7 +319,7 @@ public class MainActivity extends AppCompatActivity  {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel("notify_001",
-                    "DigiPresence Message Notifications",
+                    "Wie Is Waar Message Notifications",
                     NotificationManager.IMPORTANCE_DEFAULT);
             if (mNotificationManager != null) {
                 mNotificationManager.createNotificationChannel(channel);
@@ -317,7 +331,6 @@ public class MainActivity extends AppCompatActivity  {
         }
         for(Message m: user.getMessages()) {
             if(m.getId().equals(message.getId())) {
-                Log.i("euh", "test");
                 m.setRead(true);
                 //UpdateUser(false);
                 UpdateMessage(m);
@@ -385,7 +398,7 @@ public class MainActivity extends AppCompatActivity  {
                                     v.vibrate(500);
                                 }
                             }
-                            Toast.makeText(getApplicationContext(), "Successfully checked in", Toast.LENGTH_SHORT).show();
+                            Toast.makeText(getApplicationContext(), R.string.checkin_success, Toast.LENGTH_SHORT).show();
                             CloseApplication("CREATE CHECKIN SUCCESS");
                             break;
                         case "{\"message\":\"New sticker\"}":
@@ -406,7 +419,7 @@ public class MainActivity extends AppCompatActivity  {
             @Override
             public void onFailure(Call<ResponseBody> call, Throwable t) {
                 Log.i("error", t.getMessage());
-                Toast.makeText(getApplicationContext(), "Something went wrong while checking in", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), R.string.checkin_failure, Toast.LENGTH_SHORT).show();
                 CloseApplication("CREATE CHECKIN FAIL");
             }
         });
@@ -419,31 +432,31 @@ public class MainActivity extends AppCompatActivity  {
             @Override
             public void onResponse(Call<Campus> call, Response<Campus> response) {
                 campuses.add(response.body());
-                Toast.makeText(getApplicationContext(), "Successfully created new campus: " + campus.getName(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), getString(R.string.create_campus_success) + campus.getName(), Toast.LENGTH_SHORT).show();
                 createSegmentDialog(response.body());
             }
 
             @Override
             public void onFailure(Call<Campus> call, Throwable t) {
-                Toast.makeText(getApplicationContext(), "Something went wrong while creating new campus", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), R.string.create_campus_failure, Toast.LENGTH_SHORT).show();
                 CloseApplication("CREATE CAMPUS");
             }
         });
     }
 
-    private void UpdateCampus(Campus campus, final Segment segment) {
+    private void UpdateCampus(final Campus campus, final Segment segment) {
         Call<Campus> updateCampus = apiInterface.updateCampus(campus);
         Log.i("API", "UPDATE CAMPUS");
         updateCampus.enqueue(new Callback<Campus>() {
             @Override
             public void onResponse(Call<Campus> call, Response<Campus> response) {
-                Toast.makeText(getApplicationContext(), "Successfully updated campus", Toast.LENGTH_SHORT).show();
-                createLocationDialog(segment);
+                Toast.makeText(getApplicationContext(), R.string.update_campus_success, Toast.LENGTH_SHORT).show();
+                createLocationDialog(campus.getName(), segment);
             }
 
             @Override
             public void onFailure(Call<Campus> call, Throwable t) {
-                Toast.makeText(getApplicationContext(), "Something went wrong while updating campus", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), R.string.update_campus_failure, Toast.LENGTH_SHORT).show();
                 CloseApplication("UPDATE CAMPUS");
             }
         });
@@ -456,13 +469,13 @@ public class MainActivity extends AppCompatActivity  {
             @Override
             public void onResponse(Call<Segment> call, Response<Segment> response) {
                 campus.addSegment(response.body());
-                Toast.makeText(getApplicationContext(), "Successfully created new segment: " + segment.getName(), Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), getString(R.string.create_segment_success) + segment.getName(), Toast.LENGTH_SHORT).show();
                 UpdateCampus(campus, response.body());
             }
 
             @Override
             public void onFailure(Call<Segment> call, Throwable t) {
-                Toast.makeText(getApplicationContext(), "Something went wrong while creating new segment", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), R.string.create_segment_failure, Toast.LENGTH_SHORT).show();
                 CloseApplication("CREATE SEGMENT");
             }
         });
@@ -474,13 +487,13 @@ public class MainActivity extends AppCompatActivity  {
         updateSegment.enqueue(new Callback<Segment>() {
             @Override
             public void onResponse(Call<Segment> call, Response<Segment> response) {
-                Toast.makeText(getApplicationContext(), "Successfully updated segment", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), R.string.update_segment_success, Toast.LENGTH_SHORT).show();
                 CreateCheckin();
             }
 
             @Override
             public void onFailure(Call<Segment> call, Throwable t) {
-                Toast.makeText(getApplicationContext(), "Something went wrong while updating segment", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), R.string.update_segment_failure, Toast.LENGTH_SHORT).show();
                 CloseApplication("UPDATE SEGMENT");
             }
         });
@@ -492,14 +505,14 @@ public class MainActivity extends AppCompatActivity  {
         createLocation.enqueue(new Callback<Location>() {
             @Override
             public void onResponse(Call<Location> call, Response<Location> response) {
-                Toast.makeText(getApplicationContext(), "Successfully created new location", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), R.string.create_location_success, Toast.LENGTH_SHORT).show();
                 segment.addLocation(response.body());
                 UpdateSegment(segment);
             }
 
             @Override
             public void onFailure(Call<Location> call, Throwable t) {
-                Toast.makeText(getApplicationContext(), "Something went wrong while creating new location", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), R.string.create_location_failure, Toast.LENGTH_SHORT).show();
                 CloseApplication("CREATE LOCATION");
             }
         });
@@ -511,13 +524,13 @@ public class MainActivity extends AppCompatActivity  {
         updateLocation.enqueue(new Callback<Location>() {
             @Override
             public void onResponse(Call<Location> call, Response<Location> response) {
-                Toast.makeText(getApplicationContext(), "Successfully added sticker to location", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), R.string.update_location_success, Toast.LENGTH_SHORT).show();
                 CreateCheckin();
             }
 
             @Override
             public void onFailure(Call<Location> call, Throwable t) {
-                Toast.makeText(getApplicationContext(), "Something went wrong while add sticker to location", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getApplicationContext(), R.string.update_location_failure, Toast.LENGTH_SHORT).show();
                 CloseApplication("UPDATE LOCATION");
             }
         });
@@ -571,19 +584,27 @@ public class MainActivity extends AppCompatActivity  {
         @SuppressLint("InflateParams") final View dialogView = inflater.inflate(R.layout.show_phoneid_dialog, null);
         dialogBuilder.setView(dialogView);
 
-        dialogBuilder.setTitle("Checkin");
-        dialogBuilder.setMessage("Checked in to the same location twice.");
-        dialogBuilder.setPositiveButton("Checkout", new DialogInterface.OnClickListener() {
+        dialogBuilder.setTitle(R.string.remove_checkin);
+        dialogBuilder.setMessage(R.string.remove_checkin_message);
+        dialogBuilder.setPositiveButton(R.string.remove_checkin_positive_button, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int whichButton) {
                 user.setCheckin(null);
                 //UpdateUser(true);
                 DeleteCheckin();
             }
         });
-        dialogBuilder.setNegativeButton("Checkin again", new DialogInterface.OnClickListener() {
+        dialogBuilder.setNegativeButton(R.string.remove_checkin_negative_button, new DialogInterface.OnClickListener() {
             public void onClick(DialogInterface dialog, int whichButton) {
                 //pass
                 CreateCheckin();
+            }
+        });
+        dialogBuilder.setOnCancelListener(new DialogInterface.OnCancelListener()
+        {
+            @Override
+            public void onCancel(DialogInterface dialog)
+            {
+                CloseApplication("Dialog closed");
             }
         });
         AlertDialog b = dialogBuilder.create();
@@ -593,7 +614,7 @@ public class MainActivity extends AppCompatActivity  {
     private void newStickerDialog() {
         Log.i("DIALOG", "NEW STICKER");
         AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
-        dialogBuilder.setTitle("New sticker scanned:\nSelect campus");
+        dialogBuilder.setTitle(R.string.select_campus);
 
         final ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, android.R.layout.select_dialog_singlechoice);
         for(Campus campus: campuses) {
@@ -610,8 +631,8 @@ public class MainActivity extends AppCompatActivity  {
                     arrayAdapter.add(campus.getName());
             }
         }
-        arrayAdapter.add("Andere?");
-        dialogBuilder.setNegativeButton("cancel", new DialogInterface.OnClickListener() {
+        arrayAdapter.add(getString(R.string.andere));
+        dialogBuilder.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 CloseApplication("CANCEL  NEW STICKER DIALOG");
@@ -623,12 +644,20 @@ public class MainActivity extends AppCompatActivity  {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 String campus = arrayAdapter.getItem(which);
-                if((campus != null && campus.equals("Andere?")) && arrayAdapter.getCount() == which + 1) {
+                if((campus != null && campus.equals(getString(R.string.andere))) && arrayAdapter.getCount() == which + 1) {
                     createCampusDialog();
                 }
                 else {
                     selectSegmentDialog(campus);
                 }
+            }
+        });
+        dialogBuilder.setOnCancelListener(new DialogInterface.OnCancelListener()
+        {
+            @Override
+            public void onCancel(DialogInterface dialog)
+            {
+                CloseApplication("Dialog closed");
             }
         });
         dialogBuilder.show();
@@ -640,13 +669,13 @@ public class MainActivity extends AppCompatActivity  {
         LayoutInflater inflater = getLayoutInflater();
         @SuppressLint("InflateParams") final View dialogView = inflater.inflate(R.layout.create_campus_dialog, null);
         dialogBuilder.setView(dialogView);
-        dialogBuilder.setTitle("Create campus");
+        dialogBuilder.setTitle(R.string.create_campus);
 
         final EditText edt = dialogView.findViewById(R.id.editCampus);
         final CheckBox isLunchCheck = dialogView.findViewById(R.id.checkIsLunch);
         final CheckBox isThuiswerkCheck = dialogView.findViewById(R.id.checkIsThuiswerk);
 
-        dialogBuilder.setPositiveButton("Create", new DialogInterface.OnClickListener() {
+        dialogBuilder.setPositiveButton(R.string.create, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 String name = edt.getText().toString();
@@ -661,9 +690,18 @@ public class MainActivity extends AppCompatActivity  {
             }
         });
 
-        dialogBuilder.setNegativeButton("Back", new DialogInterface.OnClickListener() {
+        dialogBuilder.setNegativeButton(R.string.back, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
+                newStickerDialog();
+            }
+        });
+
+        dialogBuilder.setOnCancelListener(new DialogInterface.OnCancelListener()
+        {
+            @Override
+            public void onCancel(DialogInterface dialog)
+            {
                 newStickerDialog();
             }
         });
@@ -674,7 +712,7 @@ public class MainActivity extends AppCompatActivity  {
     private void selectSegmentDialog(final String campusName) {
         Log.i("DIALOG", "SELECT SEGMENT");
         AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
-        dialogBuilder.setTitle("New sticker scanned:\nSelect segment");
+        dialogBuilder.setTitle(R.string.select_segment);
 
         final ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, android.R.layout.select_dialog_singlechoice);
         for(Campus campus: campuses) {
@@ -689,8 +727,8 @@ public class MainActivity extends AppCompatActivity  {
                 }
             }
         }
-        arrayAdapter.add("Andere?");
-        dialogBuilder.setNegativeButton("cancel", new DialogInterface.OnClickListener() {
+        arrayAdapter.add(getString(R.string.andere));
+        dialogBuilder.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 CloseApplication("CANCEL SELECT SEGMENT DIALOG");
@@ -698,9 +736,18 @@ public class MainActivity extends AppCompatActivity  {
             }
         });
 
-        dialogBuilder.setPositiveButton("back", new DialogInterface.OnClickListener() {
+        dialogBuilder.setPositiveButton(R.string.back, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
+                newStickerDialog();
+            }
+        });
+
+        dialogBuilder.setOnCancelListener(new DialogInterface.OnCancelListener()
+        {
+            @Override
+            public void onCancel(DialogInterface dialog)
+            {
                 newStickerDialog();
             }
         });
@@ -709,7 +756,7 @@ public class MainActivity extends AppCompatActivity  {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 String segment = arrayAdapter.getItem(which);
-                if((segment != null && segment.equals("Andere?")) && arrayAdapter.getCount() == which + 1) {
+                if((segment != null && segment.equals(getString(R.string.andere))) && arrayAdapter.getCount() == which + 1) {
                     for(Campus campus: campuses) {
                         if(campus.getName().equals(campusName)) {
                             createSegmentDialog(campus);
@@ -722,6 +769,7 @@ public class MainActivity extends AppCompatActivity  {
 
             }
         });
+
         dialogBuilder.show();
     }
 
@@ -731,12 +779,12 @@ public class MainActivity extends AppCompatActivity  {
         LayoutInflater inflater = getLayoutInflater();
         @SuppressLint("InflateParams") final View dialogView = inflater.inflate(R.layout.create_segment_dialog, null);
         dialogBuilder.setView(dialogView);
-        dialogBuilder.setTitle("Create segment");
+        dialogBuilder.setTitle(R.string.create_segment);
 
         final EditText edt = dialogView.findViewById(R.id.editSegment);
         final CheckBox isVergaderingCheck = dialogView.findViewById(R.id.checkIsVergadering);
 
-        dialogBuilder.setPositiveButton("Create", new DialogInterface.OnClickListener() {
+        dialogBuilder.setPositiveButton(R.string.create, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 String name = edt.getText().toString();
@@ -750,10 +798,19 @@ public class MainActivity extends AppCompatActivity  {
             }
         });
 
-        dialogBuilder.setNegativeButton("Back", new DialogInterface.OnClickListener() {
+        dialogBuilder.setNegativeButton(R.string.back, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
-                newStickerDialog();
+                selectSegmentDialog(campus.getName());
+            }
+        });
+
+        dialogBuilder.setOnCancelListener(new DialogInterface.OnCancelListener()
+        {
+            @Override
+            public void onCancel(DialogInterface dialog)
+            {
+                selectSegmentDialog(campus.getName());
             }
         });
 
@@ -763,7 +820,7 @@ public class MainActivity extends AppCompatActivity  {
     private void selectLocationDialog(final String campusName, final String segmentName) {
         Log.i("DIALOG", "SELECT LOCATION");
         AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
-        dialogBuilder.setTitle("New sticker scanned:\nSelect location");
+        dialogBuilder.setTitle(R.string.select_location);
         final ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(this, android.R.layout.select_dialog_singlechoice);
         for(Campus campus: campuses) {
             if(campus.getName().equals(campusName)) {
@@ -776,8 +833,8 @@ public class MainActivity extends AppCompatActivity  {
                 }
             }
         }
-        arrayAdapter.add("Andere?");
-        dialogBuilder.setNegativeButton("cancel", new DialogInterface.OnClickListener() {
+        arrayAdapter.add(getString(R.string.andere));
+        dialogBuilder.setNegativeButton(R.string.cancel, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 CloseApplication("CANCEL SELECT LOCATION DIALOG");
@@ -785,9 +842,18 @@ public class MainActivity extends AppCompatActivity  {
             }
         });
 
-        dialogBuilder.setPositiveButton("back", new DialogInterface.OnClickListener() {
+        dialogBuilder.setPositiveButton(R.string.back, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
+                selectSegmentDialog(campusName);
+            }
+        });
+
+        dialogBuilder.setOnCancelListener(new DialogInterface.OnCancelListener()
+        {
+            @Override
+            public void onCancel(DialogInterface dialog)
+            {
                 selectSegmentDialog(campusName);
             }
         });
@@ -799,12 +865,12 @@ public class MainActivity extends AppCompatActivity  {
                 stickers.add(stickerId);
                 String locationName = arrayAdapter.getItem(which);
 
-                if((locationName != null && locationName.equals("Andere?")) && arrayAdapter.getCount() == which + 1) {
+                if((locationName != null && locationName.equals(getString(R.string.andere))) && arrayAdapter.getCount() == which + 1) {
                     for(Campus campus: campuses) {
                         if(campus.getName().equals(campusName)) {
                             for(Segment segment: campus.getSegments()) {
                                 if(segment.getName().equals(segmentName)) {
-                                    createLocationDialog(segment);
+                                    createLocationDialog(campusName, segment);
                                 }
                             }
                         }
@@ -837,18 +903,18 @@ public class MainActivity extends AppCompatActivity  {
         dialogBuilder.show();
     }
 
-    private void createLocationDialog(final Segment segment) {
+    private void createLocationDialog(final String campusName, final Segment segment) {
         Log.i("DIALOG", "CREATE LOCATION");
         AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(this);
         LayoutInflater inflater = getLayoutInflater();
         @SuppressLint("InflateParams") final View dialogView = inflater.inflate(R.layout.create_location_dialog, null);
         dialogBuilder.setView(dialogView);
-        dialogBuilder.setTitle("Create location");
+        dialogBuilder.setTitle(R.string.create_location);
 
         final EditText edt = dialogView.findViewById(R.id.editLocation);
         final CheckBox isDoNotDisturbCheck = dialogView.findViewById(R.id.checkDoNotDisturb);
 
-        dialogBuilder.setPositiveButton("Create", new DialogInterface.OnClickListener() {
+        dialogBuilder.setPositiveButton(R.string.create, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
                 String name = edt.getText().toString();
@@ -859,15 +925,24 @@ public class MainActivity extends AppCompatActivity  {
                     Location location = new Location("", name, stickers, isDoNotDisturb);
                     CreateLocation(segment, location);
                 } else {
-                    createLocationDialog(segment);
+                    createLocationDialog(campusName, segment);
                 }
             }
         });
 
-        dialogBuilder.setNegativeButton("Close", new DialogInterface.OnClickListener() {
+        dialogBuilder.setNegativeButton(R.string.back, new DialogInterface.OnClickListener() {
             @Override
             public void onClick(DialogInterface dialog, int which) {
-                CloseApplication("CLOSE CREATE LOCATION DIALOG");
+                selectLocationDialog(campusName, segment.getName());
+            }
+        });
+
+        dialogBuilder.setOnCancelListener(new DialogInterface.OnCancelListener()
+        {
+            @Override
+            public void onCancel(DialogInterface dialog)
+            {
+                selectLocationDialog(campusName, segment.getName());
             }
         });
 
