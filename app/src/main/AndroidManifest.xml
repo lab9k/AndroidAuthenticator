@@ -1,10 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.wannes.digipresence">
 
     <uses-permission android:name="android.permission.NFC" />
-    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
+
     <uses-feature android:name="android.hardware.camera" />
     <uses-feature android:name="android.hardware.camera.autofocus" />
 
@@ -14,22 +16,28 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/AppTheme" >
+        android:theme="@style/AppTheme">
         <activity
             android:name=".MainActivity"
+            android:label="@string/app_name"
             android:launchMode="singleTask"
-            android:theme="@style/Theme.AppCompat.Translucent"
-            android:label="@string/app_name">
+            android:theme="@style/Theme.AppCompat.Translucent">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+
                 <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="vnd.android.nfc" android:host="ext"
-                    android:pathPrefix="/android.com:pkg" />
+
+                <data
+                    android:host="ext"
+                    android:pathPrefix="/android.com:pkg"
+                    android:scheme="vnd.android.nfc" />
             </intent-filter>
         </activity>
     </application>
+
 </manifest>

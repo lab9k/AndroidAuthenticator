@@ -147,7 +147,7 @@ public class MainActivity extends AppCompatActivity  {
             else {
                 Log.d("MainActivity", "Scanned");
                 Log.d("MainActivity", intentResult.getContents());
-                stickerId = intentResult.getContents().replaceAll(".*\\/", "");
+                stickerId = intentResult.getContents().replaceAll(".*\\/", "").toLowerCase();
                 GetUser(false);
             }
         }
@@ -169,7 +169,7 @@ public class MainActivity extends AppCompatActivity  {
                     }
                     hexDump.append(x);
                 }
-                stickerId = hexDump.toString();
+                stickerId = hexDump.toString().toLowerCase();
                 GetUser(false);
                 getTagInfo(i);
             }
@@ -185,7 +185,7 @@ public class MainActivity extends AppCompatActivity  {
     private void showDialog() {
         AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(MainActivity.this);
         LayoutInflater inflater = MainActivity.this.getLayoutInflater();
-        @SuppressLint("InflateParams") final View dialogView = inflater.inflate(R.layout.show_phoneid_dialog, null);
+        @SuppressLint("InflateParams") final View dialogView = inflater.inflate(R.layout.empty_dialog, null);
         dialogBuilder.setView(dialogView);
 
         dialogBuilder.setTitle(R.string.app_opened);
@@ -268,9 +268,7 @@ public class MainActivity extends AppCompatActivity  {
                 user = response.body();
 
                 if(response.code() == 400) {
-                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site + "/account/register/" + uniqueID));
-                    startActivity(browserIntent);
-                    CloseApplication("GET USER 400");
+                    RegisterPhoneDialog();
                 }
                 else {
                     if(user.getMessages().length > 0) {
@@ -300,6 +298,39 @@ public class MainActivity extends AppCompatActivity  {
                 CloseApplication("GET USER FAIL");
             }
         });
+    }
+
+    private void RegisterPhoneDialog() {
+        AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(MainActivity.this);
+        LayoutInflater inflater = MainActivity.this.getLayoutInflater();
+        @SuppressLint("InflateParams") final View dialogView = inflater.inflate(R.layout.empty_dialog, null);
+        dialogBuilder.setView(dialogView);
+
+        dialogBuilder.setTitle(R.string.register_phone_title);
+        dialogBuilder.setMessage(R.string.register_phone_message);
+        dialogBuilder.setPositiveButton(R.string.open_browser, new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int whichButton) {
+                Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(site + "/account/register/" + uniqueID));
+                startActivity(browserIntent);
+                CloseApplicationLate("GET USER 400");
+            }
+        });
+        dialogBuilder.setNeutralButton(R.string.cancel, new DialogInterface.OnClickListener() {
+            public void onClick(DialogInterface dialog, int whichButton) {
+                //pass
+                CloseApplication("APP CLOSED");
+            }
+        });
+        dialogBuilder.setOnCancelListener(new DialogInterface.OnCancelListener()
+        {
+            @Override
+            public void onCancel(DialogInterface dialog)
+            {
+                CloseApplication("Dialog closed");
+            }
+        });
+        AlertDialog b = dialogBuilder.create();
+        b.show();
     }
 
     private void NewMessage(Message message) {
@@ -364,11 +395,23 @@ public class MainActivity extends AppCompatActivity  {
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+                Vibrator v = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                // Vibrate for 500 milliseconds
+                if (v != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        v.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE));
+                    }else{
+                        //deprecated in API 26
+                        v.vibrate(500);
+                    }
+                }
+                Toast.makeText(getApplicationContext(), R.string.checkout_success, Toast.LENGTH_SHORT).show();
                 CloseApplication("DELETE CHECKIN");
             }
 
             @Override
             public void onFailure(Call<ResponseBody> call, Throwable t) {
+                Toast.makeText(getApplicationContext(), R.string.checkout_failure, Toast.LENGTH_SHORT).show();
                 CloseApplication("DELETE CHECKIN");
             }
         });
@@ -581,7 +624,7 @@ public class MainActivity extends AppCompatActivity  {
         Log.i("DIALOG", "REMOVE CHECKIN");
         AlertDialog.Builder dialogBuilder = new AlertDialog.Builder(MainActivity.this);
         LayoutInflater inflater = getLayoutInflater();
-        @SuppressLint("InflateParams") final View dialogView = inflater.inflate(R.layout.show_phoneid_dialog, null);
+        @SuppressLint("InflateParams") final View dialogView = inflater.inflate(R.layout.empty_dialog, null);
         dialogBuilder.setView(dialogView);
 
         dialogBuilder.setTitle(R.string.remove_checkin);
@@ -962,6 +1005,22 @@ public class MainActivity extends AppCompatActivity  {
                 System.exit(0);
             }
         }, 2000);
+
+    }
+
+    public void CloseApplicationLate(String source) {
+        Log.i("CLOSING", "Called from " + source);
+        spinner.setVisibility(View.INVISIBLE);
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (Build.VERSION.SDK_INT >= 21)
+                    finishAndRemoveTask();
+                else
+                    finish();
+                System.exit(0);
+            }
+        }, 15000);
 
     }
 

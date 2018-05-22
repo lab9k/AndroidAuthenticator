@@ -46,4 +46,9 @@
     <string name="select_location">Nieuwe sticker gevonden: \nSelecteer locatie</string>
     <string name="create_location">Maak nieuwe locatie</string>
     <string name="close">Sluiten</string>
+    <string name="open_browser">Open Browser</string>
+    <string name="register_phone_title">Toestel niet gelinkt aan account</string>
+    <string name="register_phone_message">Uw toestel is nog niet gelinkt aan een account of u hebt de app opnieuw geïnstalleerd. Klik op de knop om de browser te openen en log dan in om uw toestel te registreren.</string>
+    <string name="checkout_success">Succesvol uitgecheckt</string>
+    <string name="checkout_failure">Er is iets misgegaan bij het uitchecken.</string>
 </resources>

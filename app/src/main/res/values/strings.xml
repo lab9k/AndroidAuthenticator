@@ -45,4 +45,9 @@
     <string name="select_location">New sticker scanned: \nSelect location</string>
     <string name="create_location">Create location</string>
     <string name="close">Close</string>
+    <string name="open_browser">Open Browser</string>
+    <string name="register_phone_title">Phone not linked to account</string>
+    <string name="register_phone_message">Your phone isn\'t linked to an account yet or you reinstalled the app. Click the button to open the browser and login te register the phone.</string>
+    <string name="checkout_success">Successfully checked out</string>
+    <string name="checkout_failure">Something went wrong while checking out</string>
 </resources>
